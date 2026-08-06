@@ -351,23 +351,42 @@ function getLineNotificationPayload(type, issue, groupIds, extra={}){
 }
 async function sendLineNotificationWithFallback(type, issue, groupIds, extra={}){
   const payload=getLineNotificationPayload(type, issue, groupIds, extra);
-  if(!payload.groupIds.length) return false;
-
-  let anyOk=false;
-  for(const gid of payload.groupIds){
-    const singlePayload={...payload,groupIds:[gid],groupId:gid};
-    const ok=await gsPost('sendLineNotification', singlePayload, {showToast:false});
-    if(ok) anyOk=true;
+  if(!payload.groupIds.length){
+    console.warn('sendLineNotificationWithFallback: no groupIds found, skipping');
+    return false;
   }
+
+  console.log(`[LINE] Sending "${type}" to ${payload.groupIds.length} group(s):`, payload.groupIds);
+
+  // ลองส่งทีละ group แยกกัน เพื่อให้แน่ใจว่าส่งครบทุก group
+  const results = await Promise.allSettled(
+    payload.groupIds.map(gid => {
+      const singlePayload={...payload, groupIds:[gid], groupId:gid};
+      console.log(`[LINE] → sending to group: ${gid}`);
+      return gsPost('sendLineNotification', singlePayload, {showToast:false});
+    })
+  );
+
+  const anyOk = results.some(r => r.status === 'fulfilled' && r.value === true);
+  const allFailed = results.every(r => r.status !== 'fulfilled' || r.value !== true);
+
+  console.log(`[LINE] Results:`, results.map((r,i)=>({group: payload.groupIds[i], ok: r.status==='fulfilled'&&r.value})));
+
   if(anyOk) return true;
 
-  const fallbackPayload={
-    type,
-    message: payload.message||issue?.desc||'',
-    groupIds: payload.groupIds||[],
-    groupId: payload.groupId||payload.groupIds[0]||''
-  };
-  return await gsPost('sendTestLine', fallbackPayload, {showToast:false});
+  // fallback: ส่ง payload รวมทุก group ในครั้งเดียว
+  if(allFailed){
+    console.log('[LINE] All individual sends failed, trying bulk fallback...');
+    const fallbackPayload={
+      type,
+      message: payload.message||issue?.desc||'',
+      groupIds: payload.groupIds,
+      groupId: payload.groupIds[0]||''
+    };
+    return await gsPost('sendTestLine', fallbackPayload, {showToast:false});
+  }
+
+  return false;
 }
 async function notifyCriticalIssue(issue){
   if(!issue.reportedAt) issue.reportedAt=new Date(issue.ts||Date.now()).toISOString();
@@ -416,15 +435,36 @@ async function notifyIssueResolved(issue){
 async function sendTestLine(){
   const groupIds=getLineGroupIds();
   if(!settings.lineChannelToken||!groupIds.length){toast('กรุณากรอก Channel Token และ Group ID อย่างน้อยหนึ่งกลุ่มก่อนส่งทดสอบ','error');return}
+
   const status=document.getElementById('line-notification-status'); if(status)status.textContent='📨 กำลังส่ง...';
 
-  let anyOk=false;
-  for(const gid of groupIds){
-    const ok=await gsPost('sendTestLine',{type:'test',message:'ทดสอบการแจ้งเตือนจาก Hanger PM',groupIds:[gid],groupId:gid});
-    if(ok) anyOk=true;
-  }
+  console.log(`[LINE Test] Sending to ${groupIds.length} group(s):`, groupIds);
 
-  if(status)status.textContent=anyOk?'✅ ส่งสำเร็จ':'❌ ส่งไม่สำเร็จ';
-  setTimeout(()=>{if(status)status.textContent=''},3000);
-  if(anyOk)toast('ส่งข้อความทดสอบ LINE แล้ว','success');
+  // ส่งทีละ group พร้อมกัน (parallel) แล้วรอผลทุกกลุ่ม
+  const results = await Promise.allSettled(
+    groupIds.map(gid => {
+      console.log(`[LINE Test] → group: ${gid}`);
+      return gsPost('sendTestLine',{type:'test',message:'ทดสอบการแจ้งเตือนจาก Hanger',groupIds:[gid],groupId:gid});
+    })
+  );
+
+  const successGroups = groupIds.filter((_,i) => results[i].status==='fulfilled' && results[i].value===true);
+  const failGroups = groupIds.filter((_,i) => !(results[i].status==='fulfilled' && results[i].value===true));
+
+  console.log('[LINE Test] Success:', successGroups);
+  console.log('[LINE Test] Failed:', failGroups);
+
+  const anyOk = successGroups.length > 0;
+  const allOk = failGroups.length === 0;
+
+  if(status){
+    if(allOk) status.textContent=`✅ ส่งสำเร็จทั้ง ${groupIds.length} กลุ่ม`;
+    else if(anyOk) status.textContent=`⚠️ ส่งสำเร็จ ${successGroups.length}/${groupIds.length} กลุ่ม`;
+    else status.textContent='❌ ส่งไม่สำเร็จ';
+  }
+  setTimeout(()=>{if(status)status.textContent=''},4000);
+
+  if(allOk) toast(`ส่งข้อความทดสอบ LINE แล้ว (${groupIds.length} กลุ่ม)`,'success');
+  else if(anyOk) toast(`ส่งสำเร็จ ${successGroups.length}/${groupIds.length} กลุ่ม — ตรวจ Console สำหรับรายละเอียด`,'warn');
+  else toast('ส่ง LINE ไม่สำเร็จ ตรวจ Console เพื่อดู error','error');
 }
