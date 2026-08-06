@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hanger PM System Desktop Online </title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="shell">
+
+<!-- ════ SIDEBAR ════ -->
+<aside class="sidebar" id="sidebar">
+  <div class="logo">
+    <div class="logo-icon">⚙️</div>
+    <div>
+      <div class="logo-text">HANGER PM</div>
+      <div class="logo-sub">Desktop Online</div>
+    </div>
+  </div>
+  <nav>
+    <div class="nav-section">หลัก</div>
+    <button class="nav-item active" onclick="showView('dashboard')">
+      <span class="ni">📊</span>แดชบอร์ด
+    </button>
+    <button class="nav-item" onclick="showView('pm')">
+      <span class="ni">🔧</span>บันทึก PM
+    </button>
+    <button class="nav-item" onclick="showView('issues')">
+      <span class="ni">⚠️</span>ปัญหา/ข้อบกพร่อง
+      <span class="nav-badge" id="issue-badge" style="display:none">0</span>
+    </button>
+    <div class="nav-section" style="margin-top:8px">วิเคราะห์</div>
+    <button class="nav-item" onclick="showView('analytics')">
+      <span class="ni">📈</span>วิเคราะห์ข้อมูล
+    </button>
+    <button class="nav-item" onclick="showView('history')">
+      <span class="ni">📋</span>ประวัติ PM
+    </button>
+    <div class="nav-section" style="margin-top:8px">ระบบ</div>
+    <button class="nav-item" onclick="showView('export')">
+      <span class="ni">📤</span>ส่งออก/นำเข้า
+    </button>
+    <button class="nav-item" onclick="showView('settings')">
+      <span class="ni">⚙️</span>ตั้งค่า
+    </button>
+  </nav>
+
+  <!-- sidebar quick stats -->
+  <div class="sidebar-stats" id="sb-stats">
+    <div class="ss-row"><span class="ss-label">PM วันนี้</span><span class="ss-val" id="sb-today">—</span></div>
+    <div class="ss-row"><span class="ss-label">เดือนนี้</span><span class="ss-val" id="sb-month">—</span></div>
+    <div class="ss-row"><span class="ss-label">เกินรอบ PM</span><span class="ss-val bad" id="sb-overdue">—</span></div>
+    <div class="ss-row"><span class="ss-label">ปัญหาค้าง</span><span class="ss-val warn" id="sb-issues">—</span></div>
+  </div>
+
+  <div class="sidebar-bottom">
+    <button class="sync-btn" onclick="initData()" id="sync-btn">
+      <span class="si">🔄</span> Sync ข้อมูล
+    </button>
+    <div class="version-tag" id="footer-date"></div>
+  </div>
+</aside>
+
+<!-- ════ MAIN CONTENT ════ -->
+<div style="display:flex;flex-direction:column;flex:1;overflow:hidden">
+<div style="display:flex;flex-direction:column;flex:1;overflow:hidden" id="views-container">
+
+<!-- ══ DASHBOARD ══ -->
+<div class="view active" id="view-dashboard">
+  <div class="view-scroll">
+    <div class="page-header">
+      <div>
+        <div class="page-title">แดชบอร์ด <span>ภาพรวม</span></div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:3px;flex-wrap:wrap">
+          <div class="page-sub" id="dash-date-display"></div>
+          <div id="dash-shift-badge" class="shift-day" style="font-size:11px;padding:2px 8px">🌅 กะเช้า</div>
+          <div id="dash-shift-remain" style="font-size:11px;color:var(--muted)"></div>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()">☀️ Light</button>
+        <button class="btn btn-primary" onclick="showView('pm')" id="dash-pm-btn">➕ บันทึก PM</button>
+      </div>
+    </div>
+
+    <div class="grid grid-5" style="margin-top:14px">
+      <div class="stat-card"><div class="stat-label">PM วันนี้</div><div class="stat-value" id="stat-today" style="color:var(--accent)">0</div><div class="stat-sub" id="stat-today-pct">0%</div></div>
+      <div class="stat-card"><div class="stat-label">กะเช้า 🌅</div><div class="stat-value" id="stat-day-shift" style="color:var(--day-color)">0</div><div class="stat-sub">เครื่องวันนี้</div></div>
+      <div class="stat-card"><div class="stat-label">กะดึก 🌙</div><div class="stat-value" id="stat-night-shift" style="color:var(--night-color)">0</div><div class="stat-sub">เครื่องวันนี้</div></div>
+      <div class="stat-card" style="cursor:pointer" onclick="document.getElementById('overview-filter').value='issue';renderOverviewGrid()">
+        <div class="stat-label">เกินรอบ PM ⏰</div><div class="stat-value" id="stat-overdue" style="color:var(--danger)">0</div><div class="stat-sub">ต้องรีบทำ PM</div>
+      </div>
+      <div class="stat-card"><div class="stat-label">ช่าง active 👨‍🔧</div><div class="stat-value" id="stat-techs" style="color:var(--purple);font-size:22px">0</div><div class="stat-sub" id="stat-techs-names" style="font-size:11px;line-height:1.4">—</div></div>
+    </div>
+
+    <div id="critical-banner-wrap" style="padding:0 28px;margin-top:-4px"></div>
+
+    <div class="month-progress-wrap" style="margin-top:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em">ความคืบหน้า PM เดือนนี้</div>
+        <div style="font-size:12px;color:var(--text);font-family:var(--mono)" id="month-progress-text">—</div>
+      </div>
+      <div class="month-progress-bar"><div class="month-progress-fill" id="month-progress-fill" style="width:0%"></div></div>
+      <div class="month-progress-label"><span id="month-progress-done"></span><span id="month-progress-left"></span></div>
+    </div>
+
+    <div class="grid grid-2">
+      <div class="card">
+        <div class="card-header"><div class="card-title"><div class="dot" style="background:var(--accent)"></div>สรุปวันนี้</div></div>
+        <div id="dash-summary-wrap" style="display:flex;flex-direction:column;gap:8px"></div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><div class="dot" style="background:var(--danger)"></div>เครื่องที่ต้องดูก่อน</div>
+          <span id="dash-pending-count-label" style="font-size:12px;color:var(--danger);font-weight:700"></span>
+        </div>
+        <div id="dash-pending-machines-wrap" style="display:flex;flex-wrap:wrap;gap:5px;min-height:60px;padding-top:4px"></div>
+      </div>
+    </div>
+
+    <div class="grid grid-2" style="padding-top:4px">
+      <div class="card">
+        <div class="card-header"><div class="card-title"><div class="dot" style="background:var(--accent)"></div>PM รายสัปดาห์ (แยกกะ)</div></div>
+        <div class="chart-container"><canvas id="chartWeekly"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title"><div class="dot" style="background:var(--purple)"></div>เครื่องที่มีปัญหาค้าง</div></div>
+        <div id="dash-priority-issues-wrap"></div>
+      </div>
+    </div>
+
+    <div style="padding:0 28px;margin-bottom:8px">
+      <div class="section-header">
+        <div class="section-title">สถานะเครื่อง Hanger — <span id="overview-month-label" style="color:var(--accent)"></span></div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <input type="month" class="form-control" id="overview-month-select" style="width:auto;padding:5px 10px" onchange="changeOverviewMonth(this.value)">
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+        <div class="search-box">
+          <span style="color:var(--muted);font-size:13px">🔍</span>
+          <input type="text" id="overview-search" placeholder="ค้นหา..." oninput="debounce('ov-search',renderOverviewGrid)">
+        </div>
+        <select class="form-control" id="overview-filter" onchange="renderOverviewGrid()" style="width:auto;padding:6px 10px;font-size:12px">
+          <option value="all">ทั้งหมด</option>
+          <option value="day">🌅 กะเช้า</option>
+          <option value="night">🌙 กะดึก</option>
+          <option value="both">✅ ครบ 2 กะ</option>
+          <option value="pending">⚪ รอ PM</option>
+          <option value="issue">🔴 มีปัญหา</option>
+        </select>
+        <div style="display:flex;gap:6px;align-items:center;margin-left:auto">
+          <div class="shift-day" id="ov-day-count" style="font-size:11px;padding:2px 8px">🌅 0</div>
+          <div class="shift-night" id="ov-night-count" style="font-size:11px;padding:2px 8px">🌙 0</div>
+          <span style="font-size:11px;color:var(--muted)" id="ov-total-count">—</span>
+        </div>
+      </div>
+      <div id="pending-alert-wrap" style="margin-bottom:10px"></div>
+      <div class="machines-grid" id="machine-overview-grid"></div>
+    </div>
+
+    <div class="grid grid-2" style="padding-top:4px">
+      <div class="card">
+        <div class="card-header"><div class="card-title"><div class="dot" style="background:var(--danger)"></div>ปัญหาล่าสุด (ยังไม่แก้ไข)</div><button class="btn btn-xs btn-secondary" onclick="showView('issues')">ดูทั้งหมด →</button></div>
+        <div id="recent-issues-list"></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title"><div class="dot" style="background:var(--purple)"></div>ประเภทปัญหา</div></div>
+        <div class="chart-container" id="chartIssueTypeWrap"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ PM RECORD ══ -->
+<div class="view" id="view-pm">
+  <div style="background:var(--surface);border-bottom:1px solid var(--border);padding:8px 28px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;flex-shrink:0">
+    <div>
+      <div class="sb-clock" id="clock-time">—</div>
+      <div style="font-size:11px;color:var(--muted)" id="clock-date"></div>
+    </div>
+    <div class="divider" style="margin:0;width:1px;height:30px;display:inline-block"></div>
+    <div class="sb-shift sb-shift-day" id="clock-shift-badge">🌅 กะเช้า</div>
+    <div style="font-size:12px;color:var(--muted)">สิ้นกะใน <strong id="clock-remain" style="color:var(--text)">—</strong></div>
+    <div class="sb-warn" id="clock-warn">⚠️ <span id="clock-warn-text"></span></div>
+    <div style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <div class="shift-day" id="pm-day-count" style="font-size:12px">🌅 กะเช้า 0</div>
+      <div class="shift-night" id="pm-night-count" style="font-size:12px">🌙 กะดึก 0</div>
+      <div id="pm-pending-count" style="font-size:12px;color:var(--danger);font-weight:700;padding:3px 9px;background:rgba(239,68,68,.08);border-radius:5px;border:1px solid rgba(239,68,68,.18)"></div>
+    </div>
+  </div>
+
+  <div class="page-header" style="padding-top:14px">
+    <div>
+      <div class="page-title">บันทึก <span>PM เครื่องจักร</span></div>
+      <div class="page-sub">คลิกเครื่องเพื่อบันทึก PM · คลิกขวาเพื่อดูรายละเอียด · <kbd>Shift</kbd>+คลิกเพื่อเลือกหลายเครื่อง</div>
+    </div>
+    <div class="header-actions">
+      <div class="search-box"><span style="color:var(--muted);font-size:14px">🔍</span><input type="text" placeholder="ค้นหาเครื่อง..." oninput="debounce('pm-search',()=>filterMachines(this.value))"></div>
+      <select class="form-control btn-secondary" id="filterStatus" onchange="filterMachinesByStatus()" style="width:auto;padding:6px 11px">
+        <option value="all">ทั้งหมด</option><option value="day">PMกะเช้า</option>
+        <option value="night">PMกะดึก</option><option value="both">ครบ 2 กะ</option>
+        <option value="pending">ยังไม่ PM</option><option value="issue">มีปัญหา</option><option value="overdue">เกินรอบ</option>
+      </select>
+      <button class="btn btn-secondary" id="batch-toggle-btn" onclick="toggleBatchMode()">☑️ เลือกหลายเครื่อง</button>
+    </div>
+  </div>
+
+  <div style="padding:8px 28px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;flex-shrink:0">
+    <div style="font-size:13px;color:var(--muted)">วันที่: <strong id="pm-date-display" style="color:var(--text)"></strong></div>
+    <input type="date" class="form-control" id="pm-date-input" style="width:auto" onchange="renderPMGrid()">
+    <input type="month" class="form-control" id="pm-month-filter" style="width:auto;padding:6px 10px" onchange="onPMMonthFilter(this.value)" title="กรองตามเดือน">
+  </div>
+
+  <div class="view-scroll">
+    <div class="batch-bar" id="batch-bar">
+      <span class="batch-count" id="batch-count-label">เลือก 0 เครื่อง</span>
+      <span style="font-size:12px;color:var(--muted)">คลิกที่การ์ดเพื่อเลือก/ยกเลิก</span>
+      <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-secondary btn-sm" onclick="batchSelectAll()">เลือกทั้งหมด</button>
+        <button class="btn btn-secondary btn-sm" onclick="batchClear()">ล้าง</button>
+        <button class="btn btn-primary btn-sm" onclick="openBatchPMModal()">🔧 บันทึก PM ที่เลือก</button>
+      </div>
+    </div>
+    <div style="padding:0 28px 6px" id="pm-pending-list-wrap"></div>
+    <div class="machines-section"><div class="machines-grid" id="machine-pm-grid"></div></div>
+  </div>
+</div>
+
+<!-- ══ ISSUES ══ -->
+<div class="view" id="view-issues">
+  <div class="view-scroll">
+    <div class="page-header">
+      <div><div class="page-title">ปัญหา<span>/ข้อบกพร่อง</span></div><div class="page-sub">บันทึกและติดตามปัญหาเครื่อง Hanger</div></div>
+      <div class="header-actions"><button class="btn btn-primary" onclick="openIssueModal()">➕ เพิ่มปัญหา</button></div>
+    </div>
+    <div class="grid">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <div class="tabs" id="issue-filter-tabs">
+          <button class="tab-btn active" onclick="filterIssues('all',this)">ทั้งหมด</button>
+          <button class="tab-btn" onclick="filterIssues('open',this)">เปิดอยู่</button>
+          <button class="tab-btn" onclick="filterIssues('in-progress',this)">กำลังแก้</button>
+          <button class="tab-btn" onclick="filterIssues('closed',this)">แก้แล้ว</button>
+        </div>
+        <select class="form-control" id="issue-machine-filter" onchange="renderIssuesTable()" style="width:auto;margin-left:auto;padding:6px 11px"><option value="all">ทุกเครื่อง</option></select>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>เครื่อง</th><th>ปัญหา / ประเภท</th><th>ระดับ</th><th>วันที่พบ</th><th>ผู้รับผิดชอบ</th><th>สถานะ</th><th style="width:90px">ดำเนินการ</th></tr></thead>
+          <tbody id="issues-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ ANALYTICS ══ -->
+<div class="view" id="view-analytics">
+  <div class="view-scroll">
+    <div class="page-header">
+      <div><div class="page-title">วิเคราะห์<span>ข้อมูล</span></div><div class="page-sub">ดูภาพรวม PM และปัญหาแบบเข้าใจง่าย</div></div>
+      <div class="header-actions">
+        <select class="form-control" id="analytics-period" onchange="renderAnalytics()" style="width:auto;padding:7px 12px">
+          <option value="30">30 วันล่าสุด</option><option value="60">60 วัน</option>
+          <option value="90">90 วัน</option><option value="all">ทั้งหมด</option>
+        </select>
+      </div>
+    </div>
+    <div class="page-sub" style="padding:0 28px 12px">ตัวเลขด้านล่างช่วยให้เห็นว่าเครื่องไหนทำ PM บ่อย เครื่องไหนมีปัญหามาก และแนวโน้มมีดีขึ้นหรือไม่</div>
+    <div class="grid grid-3">
+      <div class="stat-card"><div class="stat-label">ค่าเฉลี่ย PM ต่อวัน</div><div class="stat-value" id="ana-avg" style="color:var(--accent)">—</div></div>
+      <div class="stat-card"><div class="stat-label">เครื่องที่มีปัญหามากที่สุด</div><div class="stat-value" id="ana-top-issue" style="color:var(--danger);font-size:18px">—</div></div>
+      <div class="stat-card"><div class="stat-label">เครื่องที่ PM มากที่สุด</div><div class="stat-value" id="ana-top-pm" style="color:var(--success);font-size:18px">—</div></div>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <div class="card-header"><div class="card-title"><div class="dot" style="background:var(--success)"></div>อัตราการ PM ครบตามแผน</div></div>
+        <div class="page-sub" style="margin:-4px 0 10px">กราฟแสดงว่าแต่ละเดือนมีเครื่องที่ทำ PM ครบตามแผนกี่เปอร์เซ็นต์</div>
+        <div class="chart-container" style="height:200px"><canvas id="chartCompliance"></canvas></div>
+      </div>
+    </div>
+    <div class="grid grid-2">
+      <div class="card"><div class="card-header"><div class="card-title"><div class="dot" style="background:var(--accent)"></div>จำนวน PM ของแต่ละเครื่อง</div></div><div class="page-sub" style="margin:-4px 0 10px">เครื่องที่ PM มากขึ้นจะอยู่ด้านบน</div><div class="chart-container" style="height:310px"><canvas id="chartMachineBar"></canvas></div></div>
+      <div class="card"><div class="card-header"><div class="card-title"><div class="dot" style="background:var(--danger)"></div>จำนวนปัญหาของแต่ละเครื่อง</div></div><div class="page-sub" style="margin:-4px 0 10px">เครื่องที่มีปัญหามากจะมีค่าในกราฟสูงขึ้น</div><div class="chart-container" style="height:310px"><canvas id="chartIssueBar"></canvas></div></div>
+    </div>
+    <div class="grid grid-2">
+      <div class="card"><div class="card-header"><div class="card-title"><div class="dot" style="background:var(--night-color)"></div>แนวโน้ม PM แยกตามกะ</div></div><div class="page-sub" style="margin:-4px 0 10px">ดูว่าแต่ละเดือนมี PM ในกะเช้าและกะดึกมากน้อยแค่ไหน</div><div class="chart-container"><canvas id="chartMonthly"></canvas></div></div>
+      <div class="card"><div class="card-header"><div class="card-title"><div class="dot" style="background:var(--purple)"></div>ระดับความรุนแรงของปัญหา</div></div><div class="page-sub" style="margin:-4px 0 10px">ช่วยให้เห็นว่าปัญหาส่วนใหญ่เป็นระดับใด</div><div class="chart-container"><canvas id="chartSeverity"></canvas></div></div>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <div class="card-header"><div class="card-title"><div class="dot" style="background:var(--success)"></div>สัดส่วน PM ของแต่ละเครื่อง</div></div>
+        <div class="page-sub" style="margin:-4px 0 10px">แถบสั้น/ยาวช่วยให้เห็นว่าเครื่องไหนมี PM น้อยกว่าเครื่องอื่น</div>
+        <div id="machine-completion-bars"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ HISTORY ══ -->
+<div class="view" id="view-history">
+  <div class="view-scroll">
+    <div class="page-header">
+      <div><div class="page-title">ประวัติ<span> PM</span></div><div class="page-sub">ค้นหาและดูรายละเอียด PM ที่ทำไปแล้ว</div></div>
+      <div class="header-actions">
+        <span style="font-size:12px;color:var(--muted)" id="hist-count"></span>
+      </div>
+    </div>
+    <div class="grid">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <div class="search-box"><span style="color:var(--muted)">🔍</span><input type="text" id="hist-search" placeholder="ค้นหาชื่อเครื่อง / ช่าง / หมายเหตุ" oninput="filterHistory()"></div>
+        <select class="form-control" id="hist-machine" onchange="filterHistory()" style="width:auto;padding:6px 10px"><option value="all">ทุกเครื่อง</option></select>
+        <input type="date" class="form-control" id="hist-from" style="width:auto" onchange="filterHistory()" placeholder="ตั้งแต่">
+        <input type="date" class="form-control" id="hist-to" style="width:auto" onchange="filterHistory()" placeholder="ถึง">
+        <button class="btn btn-secondary btn-sm" onclick="clearHistoryFilter()">ล้างตัวกรอง</button>
+      </div>
+      <div class="page-sub" style="margin-top:6px">กรองด้วยเครื่อง วันที่ หรือคำค้นหาเพื่อดูประวัติ PM ที่ต้องการได้ทันที</div>
+      <div class="table-wrap" id="history-table-wrap">
+        <table>
+          <caption class="sr-only">ตารางประวัติ PM พร้อมตัวกรองตามวันที่และเครื่อง</caption>
+          <thead><tr><th>วันที่</th><th>กะ</th><th>เครื่อง</th><th>ช่าง</th><th>รายการ PM / หมายเหตุ</th><th style="width:80px">ลบ</th></tr></thead>
+          <tbody id="history-tbody"></tbody>
+        </table>
+      </div>
+      <div id="history-empty" class="empty-state" style="display:none"><div class="empty-icon">📋</div><div class="empty-text">ไม่มีประวัติ PM</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ EXPORT ══ -->
+<div class="view" id="view-export">
+  <div class="view-scroll">
+    <div style="max-width:900px;margin:0 auto;padding:0 24px">
+      <div class="page-header" style="padding-left:0;padding-right:0">
+        <div><div class="page-title">ส่งออก<span>/นำเข้า</span></div><div class="page-sub">Export ข้อมูลเป็น CSV/JSON และนำเข้า</div></div>
+      </div>
+      <div class="grid grid-2" style="padding-left:0;padding-right:0">
+        <div class="card">
+          <div class="card-header"><div class="card-title">📤 ส่งออก PM Records</div></div>
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div class="form-group">
+              <div class="form-label">ช่วงเวลา</div>
+              <select class="form-control" id="exp-period" onchange="toggleExpMonthPicker(this.value)">
+                <option value="all">ทั้งหมด</option><option value="today">วันนี้</option>
+                <option value="week">7 วัน</option><option value="month">เดือนที่เลือก</option>
+              </select>
+            </div>
+            <div id="exp-month-wrap" style="display:none">
+              <div class="form-label">เลือกเดือน</div>
+              <input type="month" class="form-control" id="exp-month">
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-primary" onclick="exportCSV('pm')">📥 Export CSV</button>
+              <button class="btn btn-secondary" onclick="exportJSON('pm')">📥 Export JSON</button>
+              <button class="btn btn-secondary" onclick="exportHTMLReport()">🖨 รายงานวันนี้</button>
+            </div>
+            <button class="btn btn-success" onclick="exportMonthlyReport()" style="width:100%">📊 รายงานประจำเดือน (HTML)</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">⚠️ ส่งออกปัญหา</div></div>
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div class="form-group">
+              <div class="form-label">สถานะ</div>
+              <select class="form-control" id="exp-issue-status">
+                <option value="all">ทั้งหมด</option><option value="open">เปิดอยู่</option>
+                <option value="in-progress">กำลังแก้</option><option value="closed">แก้แล้ว</option>
+              </select>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-primary" onclick="exportCSV('issues')">📥 Export CSV</button>
+              <button class="btn btn-secondary" onclick="exportJSON('issues')">📥 Export JSON</button>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">📥 นำเข้าจาก CSV</div></div>
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div class="form-group">
+              <div class="form-label">ประเภทข้อมูล</div>
+              <select class="form-control" id="csv-import-type"><option value="pm">PM Records</option><option value="issues">ปัญหา</option></select>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-secondary" onclick="downloadCSVTemplate()">⬇️ ดาวน์โหลด Template</button>
+              <label class="btn btn-primary" style="cursor:pointer">📁 เลือกไฟล์ CSV <input type="file" accept=".csv" style="display:none" onchange="importCSV(this)"></label>
+            </div>
+            <div id="csv-import-result" style="display:none"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SETTINGS ══ -->
+<div class="view" id="view-settings">
+  <div class="view-scroll">
+    <div style="max-width:1000px;margin:0 auto;padding:0 24px">
+      <div class="page-header" style="padding-left:0;padding-right:0">
+        <div><div class="page-title">ตั้งค่า<span>เครื่องจักร</span></div><div class="page-sub">จัดการรายชื่อเครื่อง Hanger และรอบ PM</div></div>
+        <div class="header-actions">
+          <button class="btn btn-primary" onclick="openAddMachineModal()">➕ เพิ่มเครื่อง</button>
+          <button class="btn btn-secondary" onclick="resetMachinesToDefault()">↩ ค่าเริ่มต้น</button>
+        </div>
+      </div>
+      <div class="grid" style="padding-left:0;padding-right:0">
+        <div class="card">
+          <div class="card-header"><div class="card-title">� ป้องกัน Admin PIN</div></div>
+          <p style="font-size:12px;color:var(--muted);margin-bottom:12px">ตั้ง PIN เพื่อป้องกันไม่ให้ผู้อื่นแก้ไขการตั้งค่า</p>
+          <div class="form-group">
+            <div class="form-label">PIN ปัจจุบัน</div>
+            <div style="display:flex;gap:6px">
+              <input type="password" class="form-control" id="change-old-pin" placeholder="••••" maxlength="6" style="flex:1">
+              <button class="btn btn-secondary btn-sm" onclick="changeAdminPin()" style="white-space:nowrap">🔄 เปลี่ยน</button>
+            </div>
+          </div>
+          <div id="change-pin-error" style="font-size:12px;color:var(--danger);display:none;margin-top:8px"></div>
+          <div id="change-pin-success" style="font-size:12px;color:var(--success);display:none;margin-top:8px"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">�📋 รายชื่อเครื่อง Hanger</div></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>#</th><th>ชื่อเครื่อง</th><th>Model</th><th>PM เดือนนี้</th><th>PM ล่าสุด</th><th>รอบ PM (วัน)</th><th>ดำเนินการ</th></tr></thead>
+              <tbody id="settings-machines-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">🔄 รอบ PM ทั้งหมด</div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input type="number" class="form-control" id="global-cycle-input" value="30" min="1" max="365" style="width:80px;padding:5px 8px">
+              <span style="font-size:12px;color:var(--muted)">วัน</span>
+              <button class="btn btn-secondary btn-sm" onclick="applyGlobalCycle()">ใช้กับทุกเครื่อง</button>
+            </div>
+          </div>
+          <div class="settings-pm-cycle-grid" id="pm-cycle-settings-grid"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">✉️ แจ้งเตือนทางอีเมล</div></div>
+          <p style="font-size:12px;color:var(--muted);margin-bottom:14px">เพิ่มหรือจัดการที่อยู่อีเมลสำหรับการแจ้งเตือน</p>
+          
+          <!-- Email list section -->
+          <div style="margin-bottom:16px">
+            <div class="form-label" style="margin-bottom:8px">ผู้รับการแจ้งเตือน</div>
+            <div id="email-recipient-list" style="display:flex;flex-direction:column;gap:6px;min-height:60px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:10px"></div>
+          </div>
+          
+          <!-- Add email section -->
+          <div style="display:flex;gap:6px;margin-bottom:14px">
+            <input type="text" class="form-control" id="email-new-input" placeholder="example@company.com" style="flex:1" onkeypress="if(event.key==='Enter'){addEmailNotification();event.preventDefault()}">
+            <button class="btn btn-secondary btn-sm" onclick="addEmailNotification()" style="white-space:nowrap">➕ เพิ่ม</button>
+          </div>
+          
+          <!-- Notification types -->
+          <div style="display:flex;gap:18px;flex-wrap:wrap;font-size:13px;margin-bottom:14px;padding:12px;background:var(--surface2);border-radius:7px">
+            <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="email-critical-toggle"> ปัญหาระดับ 3–4</label>
+            <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="email-overdue-toggle"> PM เกินกำหนด</label>
+            <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="email-daily-toggle"> สรุปรายวัน</label>
+          </div>
+          
+          <!-- Action buttons -->
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <button class="btn btn-primary btn-sm" onclick="saveEmailSettings()">💾 บันทึกการตั้งค่า</button>
+            <button class="btn btn-secondary btn-sm" onclick="sendTestEmail()">📨 ส่งทดสอบ</button>
+            <span id="email-notification-status" style="font-size:12px;color:var(--accent)"></span>
+          </div>
+        </div>
+        <!-- LINE Notification Settings -->
+        <div class="card">
+          <div class="card-header"><div class="card-title">💬 แจ้งเตือนทาง LINE</div></div>
+          <p style="font-size:12px;color:var(--muted);margin-bottom:14px">กำหนด Channel Access Token และ Group ID สำหรับส่งข้อความแจ้งเตือน (รองรับหลาย Group)</p>
+          <div class="form-group">
+            <div class="form-label">Channel Access Token</div>
+            <input type="password" class="form-control" id="line-channel-token" placeholder="Channel Access Token" style="max-width:640px">
+          </div>
+          <div class="form-group">
+            <div class="form-label">กลุ่ม LINE ที่จะส่ง</div>
+            <div id="line-group-list" style="display:flex;flex-direction:column;gap:6px;min-height:60px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:10px"></div>
+          </div>
+          <div class="form-group" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <input type="text" class="form-control" id="line-new-group" placeholder="กรอก Group ID หรือ Destination ID" style="flex:1;max-width:320px" onkeypress="if(event.key==='Enter'){addLineGroup();event.preventDefault()}">
+            <button class="btn btn-secondary btn-sm" onclick="addLineGroup()" style="white-space:nowrap">➕ เพิ่ม</button>
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:-8px;margin-bottom:10px">เพิ่มได้หลายกลุ่ม แล้วระบบจะส่งแจ้งเตือนไปยังทุก Group ที่เพิ่มไว้</div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <button class="btn btn-primary btn-sm" onclick="saveLineSettings()">💾 บันทึก LINE</button>
+            <button class="btn btn-secondary btn-sm" onclick="sendTestLine()">📨 ส่งทดสอบ LINE</button>
+            <span id="line-notification-status" style="font-size:12px;color:var(--accent)"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ ADMIN PIN MODAL ══ -->
+<div class="overlay" id="modal-admin-pin">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header"><div class="modal-title">🔐 ตรวจสอบ Admin PIN</div><button class="btn-icon" onclick="closeModal('modal-admin-pin')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group">
+        <div class="form-label">ป้อน Admin PIN</div>
+        <input type="password" class="form-control" id="admin-pin-input" placeholder="••••" maxlength="6" onkeypress="if(event.key==='Enter'){verifyAdminPin();event.preventDefault()}">
+      </div>
+      <div id="admin-pin-error" style="font-size:12px;color:var(--danger);display:none;margin-bottom:10px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-admin-pin')">ยกเลิก</button>
+      <button class="btn btn-primary" onclick="verifyAdminPin()">✓ ยืนยัน</button>
+    </div>
+  </div>
+</div>
+
+</div><!-- end views-container -->
+
+<!-- ══ STATUS BAR ══ -->
+<div class="statusbar">
+  <span class="sb-clock" id="sb-clock-time">—</span>
+  <span class="sb-shift sb-shift-day" id="sb-shift-badge">🌅 กะเช้า</span>
+  <div class="sb-sep"></div>
+  <span class="sb-stat">สิ้นกะใน <strong id="sb-remain" style="margin-left:4px">—</strong></span>
+  <div class="sb-sep"></div>
+  <span id="sb-date-str" style="color:var(--muted)"></span>
+  <span class="sb-warn" id="sb-warn"></span>
+</div>
+</div>
+</div>
+
+<!-- ════ MODALS ════ -->
+
+<!-- Edit Machine -->
+<div class="overlay" id="modal-edit-machine">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header"><div class="modal-title" id="modal-edit-machine-title">✏️ แก้ไขเครื่อง</div><button class="btn-icon" onclick="closeModal('modal-edit-machine')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="edit-machine-id">
+      <div class="form-group"><div class="form-label">ชื่อเครื่อง</div><input type="text" class="form-control" id="edit-machine-name" placeholder="เช่น Hanger A-Line 01"></div>
+      <div class="form-group"><div class="form-label">Model</div><input type="text" class="form-control" id="edit-machine-model" placeholder="เช่น HNG-200"></div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-edit-machine')">ยกเลิก</button><button class="btn btn-primary" onclick="saveMachineEdit()">✓ บันทึก</button></div>
+  </div>
+</div>
+
+<!-- PM Entry -->
+<div class="overlay" id="modal-pm">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">🔧 PM — <span id="modal-pm-machine-name">—</span></div>
+      <button class="btn-icon" onclick="closeModal('modal-pm')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="row">
+        <div class="form-group"><div class="form-label">วันที่</div><input type="date" class="form-control" id="pm-entry-date"></div>
+        <div class="form-group"><div class="form-label">กะการทำงาน</div><div class="shift-picker">
+          <div class="shift-opt" id="opt-day" onclick="selectShift('day')">🌅 กะเช้า<br><span style="font-size:10px;font-weight:400;display:block;margin-top:2px">08:30 – 20:30</span></div>
+          <div class="shift-opt" id="opt-night" onclick="selectShift('night')">🌙 กะดึก<br><span style="font-size:10px;font-weight:400;display:block;margin-top:2px">20:30 – 08:30</span></div>
+        </div></div>
+      </div>
+      <div class="form-group">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
+          <div class="form-label" style="margin:0">รายการ PM ที่ทำ</div>
+          <span style="font-size:11px;color:var(--muted)" id="chk-progress-label">0/0</span>
+        </div>
+        <div id="pm-checklist" style="display:flex;flex-direction:column;gap:4px"></div>
+      </div>
+      <div class="form-group"><div class="form-label">หมายเหตุ / สิ่งที่พบ</div><textarea class="form-control" id="pm-entry-note" rows="2" placeholder="หมายเหตุ..."></textarea></div>
+      <div class="form-group">
+        <div class="form-label">พบปัญหาหรือไม่</div>
+        <select class="form-control" id="pm-entry-has-issue" onchange="toggleIssueSection(this.value)">
+          <option value="no">ไม่พบปัญหา</option>
+          <option value="yes">พบปัญหา (สร้างรายการปัญหาอัตโนมัติ)</option>
+        </select>
+      </div>
+      <div id="pm-issue-section" style="display:none;flex-direction:column;gap:10px">
+        <div class="row">
+          <div class="form-group"><div class="form-label">ประเภทปัญหา</div>
+            <select class="form-control" id="pm-issue-type"><option>ระบบไฟฟ้า</option><option>ระบบเครื่องกล</option><option>ระบบไฮดรอลิก</option><option>ชิ้นส่วนสึกหรอ</option><option>การปรับตั้ง</option><option>อื่นๆ</option></select>
+          </div>
+          <div class="form-group"><div class="form-label">ความรุนแรง</div>
+            <select class="form-control" id="pm-issue-severity"><option value="1">1 - เล็กน้อย</option><option value="2">2 - ปานกลาง</option><option value="3">3 - รุนแรง</option><option value="4">4 - วิกฤต</option></select>
+          </div>
+        </div>
+        <div class="form-group"><div class="form-label">รายละเอียดปัญหา</div><textarea class="form-control" id="pm-issue-desc" rows="2" placeholder="อธิบายปัญหา..."></textarea></div>
+      </div>
+      <div class="form-group" style="margin-top:8px;padding-top:10px;border-top:1px solid var(--border)">
+        <div class="form-label">ผู้จัดทำ PM</div>
+        <input type="hidden" id="pm-entry-tech">
+        <div id="pm-tech-picker" class="tech-picker"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-pm')">ยกเลิก</button>
+      <button class="btn btn-primary" onclick="savePMEntry()">✓ บันทึก PM</button>
+    </div>
+  </div>
+</div>
+
+<!-- Issue -->
+<div class="overlay" id="modal-issue">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title" id="modal-issue-title">➕ เพิ่มปัญหา</div><button class="btn-icon" onclick="closeModal('modal-issue')">✕</button></div>
+    <div class="modal-body">
+      <div class="row">
+        <div class="form-group"><div class="form-label">เครื่อง</div><select class="form-control" id="issue-machine"></select></div>
+        <div class="form-group"><div class="form-label">วันที่พบ</div><input type="date" class="form-control" id="issue-date"></div>
+      </div>
+      <div class="row">
+        <div class="form-group"><div class="form-label">ประเภทปัญหา</div>
+          <select class="form-control" id="issue-type"><option>ระบบไฟฟ้า</option><option>ระบบเครื่องกล</option><option>ระบบไฮดรอลิก</option><option>ชิ้นส่วนสึกหรอ</option><option>การปรับตั้ง</option><option>อื่นๆ</option></select>
+        </div>
+        <div class="form-group"><div class="form-label">ความรุนแรง</div>
+          <select class="form-control" id="issue-severity"><option value="1">1 - เล็กน้อย</option><option value="2">2 - ปานกลาง</option><option value="3">3 - รุนแรง</option><option value="4">4 - วิกฤต</option></select>
+        </div>
+      </div>
+      <div class="form-group"><div class="form-label">รายละเอียดปัญหา</div><textarea class="form-control" id="issue-desc" rows="3" placeholder="อธิบายปัญหา..."></textarea></div>
+      <div class="row">
+        <div class="form-group"><div class="form-label">สถานะ</div>
+          <select class="form-control" id="issue-status-select"><option value="open">เปิดอยู่</option><option value="in-progress">กำลังแก้ไข</option><option value="closed">แก้ไขแล้ว</option></select>
+        </div>
+        <div class="form-group"><div class="form-label">ผู้รับผิดชอบ</div><input type="text" class="form-control" id="issue-assignee" placeholder="ชื่อช่าง..."></div>
+      </div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-issue')">ยกเลิก</button><button class="btn btn-primary" onclick="saveIssue()">✓ บันทึก</button></div>
+  </div>
+</div>
+
+<!-- Machine Detail -->
+<div class="overlay" id="modal-machine">
+  <div class="modal modal-wide">
+    <div class="modal-header"><div class="modal-title" id="modal-machine-title">—</div><button class="btn-icon" onclick="closeModal('modal-machine')">✕</button></div>
+    <div class="modal-body">
+      <div class="tabs" style="margin-bottom:14px">
+        <button class="tab-btn active" onclick="switchMachineTab('pm',this)">PM Log</button>
+        <button class="tab-btn" onclick="switchMachineTab('issues',this)">ปัญหา</button>
+      </div>
+      <div id="machine-tab-pm"></div>
+      <div id="machine-tab-issues" style="display:none"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary btn-sm" onclick="openPMFromDetail()">+ บันทึก PM</button>
+      <button class="btn btn-secondary btn-sm" onclick="openIssueFromDetail()">+ เพิ่มปัญหา</button>
+      <button class="btn btn-secondary" onclick="closeModal('modal-machine')">ปิด</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm Close Issue -->
+<div class="overlay" id="modal-confirm-close">
+  <div class="modal" style="max-width:460px">
+    <div class="modal-header">
+      <div class="modal-title" style="color:var(--success)">✅ ยืนยันปิดปัญหา</div>
+      <button class="btn-icon" onclick="closeModal('modal-confirm-close')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--muted);margin-bottom:14px">กรุณายืนยันว่าปัญหานี้ได้รับการแก้ไขเรียบร้อยแล้ว</p>
+      <div style="background:var(--surface2);border-radius:9px;padding:14px;display:flex;flex-direction:column;gap:9px;font-size:13px">
+        <div style="display:flex;gap:10px"><span style="color:var(--muted);width:80px;flex-shrink:0">เครื่อง</span><strong id="cc-machine">—</strong></div>
+        <div style="display:flex;gap:10px"><span style="color:var(--muted);width:80px;flex-shrink:0">ประเภท</span><span id="cc-type">—</span></div>
+        <div style="display:flex;gap:10px"><span style="color:var(--muted);width:80px;flex-shrink:0">ระดับ</span><span id="cc-severity">—</span></div>
+        <div style="display:flex;gap:10px;align-items:flex-start"><span style="color:var(--muted);width:80px;flex-shrink:0;padding-top:1px">รายละเอียด</span><span id="cc-desc" style="color:var(--muted);line-height:1.5">—</span></div>
+      </div>
+      <div style="margin-top:12px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:8px;padding:10px 13px;font-size:12px;color:var(--success)">
+        ⚠️ เมื่อยืนยันแล้ว สถานะจะเปลี่ยนเป็น "แก้ไขแล้ว" และบันทึกลง Google Server
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-confirm-close')">ยกเลิก</button>
+      <button class="btn btn-success" id="cc-confirm-btn">✅ ยืนยัน — แก้ไขปัญหาแล้ว</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete PM Confirm -->
+<div class="overlay" id="modal-delete-pm">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header"><div class="modal-title" style="color:var(--danger)">🗑️ ยืนยันลบ PM</div><button class="btn-icon" onclick="closeModal('modal-delete-pm')">✕</button></div>
+    <div class="modal-body">
+      <p style="font-size:14px">ต้องการลบบันทึก PM นี้หรือไม่?</p>
+      <div style="background:var(--surface2);border-radius:7px;padding:12px;margin-top:8px;font-size:13px" id="delete-pm-details"></div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-delete-pm')">ยกเลิก</button><button class="btn btn-danger" onclick="executeDeletePM()">🗑️ ยืนยันลบ</button></div>
+  </div>
+</div>
+
+<!-- Batch PM -->
+<div class="overlay" id="modal-batch-pm">
+  <div class="modal" style="max-width:500px">
+    <div class="modal-header"><div class="modal-title">🔧 บันทึก PM หลายเครื่อง</div><button class="btn-icon" onclick="closeModal('modal-batch-pm')">✕</button></div>
+    <div class="modal-body">
+      <div style="background:var(--surface2);border-radius:7px;padding:9px 12px;font-size:12px;color:var(--muted)">เครื่องที่เลือก: <span id="batch-machine-list" style="color:var(--accent);font-weight:700"></span></div>
+      <div class="row">
+        <div class="form-group"><div class="form-label">วันที่</div><input type="date" class="form-control" id="batch-date"></div>
+        <div class="form-group"><div class="form-label">กะการทำงาน</div><div class="shift-picker">
+          <div class="shift-opt" id="batch-opt-day" onclick="selectBatchShift('day')">🌅 กะเช้า<br><span style="font-size:10px;font-weight:400;display:block;margin-top:2px">08:30 – 20:30</span></div>
+          <div class="shift-opt" id="batch-opt-night" onclick="selectBatchShift('night')">🌙 กะดึก<br><span style="font-size:10px;font-weight:400;display:block;margin-top:2px">20:30 – 08:30</span></div>
+        </div></div>
+      </div>
+      <div class="form-group"><div class="form-label">หมายเหตุ</div><textarea class="form-control" id="batch-note" rows="2" placeholder="หมายเหตุ..."></textarea></div>
+      <div class="form-group" style="margin-top:8px;padding-top:10px;border-top:1px solid var(--border)">
+        <div class="form-label">ผู้จัดทำ PM</div>
+        <input type="hidden" id="batch-tech">
+        <div id="batch-tech-picker" class="tech-picker"></div>
+      </div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-batch-pm')">ยกเลิก</button><button class="btn btn-primary" onclick="saveBatchPM()">✓ บันทึก PM ทั้งหมด</button></div>
+  </div>
+</div>
+
+<div class="toast-container" id="toasts"></div>
+<div id="pm-card-tooltip" class="pm-tooltip"></div>
+
+<script>
+// Force reload of latest script content in browser caches.
+window.__HANGER_APP_VERSION__='2026-08-04-1';
+const params=new URLSearchParams(window.location.search);
+if(params.get('gs_url')){
+  window.HANGER_GS_URL=params.get('gs_url');
+}
+</script>
+<script src="Hanger PM System  Desktop.data.js"></script>
+<script src="desktop.ui.js"></script>
+<script src="app.js"></script>
