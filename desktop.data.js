@@ -351,13 +351,21 @@ function getLineNotificationPayload(type, issue, groupIds, extra={}){
 }
 async function sendLineNotificationWithFallback(type, issue, groupIds, extra={}){
   const payload=getLineNotificationPayload(type, issue, groupIds, extra);
-  const lineOk=await gsPost('sendLineNotification', payload, {showToast:false});
-  if(lineOk) return true;
+  if(!payload.groupIds.length) return false;
+
+  let anyOk=false;
+  for(const gid of payload.groupIds){
+    const singlePayload={...payload,groupIds:[gid],groupId:gid};
+    const ok=await gsPost('sendLineNotification', singlePayload, {showToast:false});
+    if(ok) anyOk=true;
+  }
+  if(anyOk) return true;
+
   const fallbackPayload={
     type,
     message: payload.message||issue?.desc||'',
     groupIds: payload.groupIds||[],
-    groupId: payload.groupId||''
+    groupId: payload.groupId||payload.groupIds[0]||''
   };
   return await gsPost('sendTestLine', fallbackPayload, {showToast:false});
 }
@@ -409,8 +417,14 @@ async function sendTestLine(){
   const groupIds=getLineGroupIds();
   if(!settings.lineChannelToken||!groupIds.length){toast('กรุณากรอก Channel Token และ Group ID อย่างน้อยหนึ่งกลุ่มก่อนส่งทดสอบ','error');return}
   const status=document.getElementById('line-notification-status'); if(status)status.textContent='📨 กำลังส่ง...';
-  const ok=await gsPost('sendTestLine',{type:'test',message:'ทดสอบการแจ้งเตือนจาก Hanger PM',groupIds,groupId:groupIds[0]});
-  if(status)status.textContent=ok?'✅ ส่งสำเร็จ':'❌ ส่งไม่สำเร็จ';
+
+  let anyOk=false;
+  for(const gid of groupIds){
+    const ok=await gsPost('sendTestLine',{type:'test',message:'ทดสอบการแจ้งเตือนจาก Hanger PM',groupIds:[gid],groupId:gid});
+    if(ok) anyOk=true;
+  }
+
+  if(status)status.textContent=anyOk?'✅ ส่งสำเร็จ':'❌ ส่งไม่สำเร็จ';
   setTimeout(()=>{if(status)status.textContent=''},3000);
-  if(ok)toast('ส่งข้อความทดสอบ LINE แล้ว','success');
+  if(anyOk)toast('ส่งข้อความทดสอบ LINE แล้ว','success');
 }
