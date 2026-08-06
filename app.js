@@ -1387,13 +1387,21 @@ function getLineNotificationPayload(type, issue, groupIds, extra={}){
 }
 async function sendLineNotificationWithFallback(type, issue, groupIds, extra={}){
   const payload=getLineNotificationPayload(type, issue, groupIds, extra);
-  const lineOk=await gsPost('sendLineNotification', payload, {showToast:false});
-  if(lineOk) return true;
+  if(!payload.groupIds.length) return false;
+
+  let anyOk=false;
+  for(const gid of payload.groupIds){
+    const singlePayload={...payload,groupIds:[gid],groupId:gid};
+    const ok=await gsPost('sendLineNotification', singlePayload, {showToast:false});
+    if(ok) anyOk=true;
+  }
+  if(anyOk) return true;
+
   const fallbackPayload={
     type,
     message: payload.message||issue?.desc||'',
     groupIds: payload.groupIds||[],
-    groupId: payload.groupId||''
+    groupId: payload.groupId||payload.groupIds[0]||''
   };
   return await gsPost('sendTestLine', fallbackPayload, {showToast:false});
 }
