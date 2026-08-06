@@ -1,6 +1,7 @@
 const GS_URL='https://script.google.com/macros/s/AKfycbzdDUpDHE3wFSdxZEsxSX1IWuDkbGr9FS0sGfzcZYPGjDaOjGdvT5Zqn0DpQJ4E70lg/exec';
 const DATA_CACHE_KEY='hanger-pm-cache-v1';
 const DATA_CACHE_TTL_MS=5*60*1000;
+const DEFAULT_FETCH_TIMEOUT_MS=15000;
 
 function readDataCache(){
   try{
@@ -29,7 +30,7 @@ function applyCachedData(cached){
   if(Array.isArray(cached.issues)) issues=cached.issues;
   return true;
 }
-function createFetchWithTimeout(url,options={},timeoutMs=6000){
+function createFetchWithTimeout(url,options={},timeoutMs=DEFAULT_FETCH_TIMEOUT_MS){
   const controller=new AbortController();
   const timer=setTimeout(()=>controller.abort(),timeoutMs);
   return {
