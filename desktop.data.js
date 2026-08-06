@@ -65,16 +65,33 @@ async function gsGet(action){
 async function gsPost(action,payload,options={}){
   const {showToast=true}=options;
   const body=JSON.stringify({action,payload});
+
+  // attempt 1: POST text/plain (ไม่ trigger CORS preflight)
+  // attempt 2: GET via query string (fallback สำหรับ CORS ที่แน่นมาก)
   const attempts=[
-    {headers:{'Content-Type':'application/json','Accept':'application/json'}, body},
-    {headers:{'Content-Type':'text/plain;charset=UTF-8','Accept':'application/json'}, body}
+    {
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=UTF-8'},
+      body
+    },
+    {
+      method:'GET',
+      url:`${GS_URL}?action=${encodeURIComponent(action)}&payload=${encodeURIComponent(JSON.stringify(payload))}`
+    }
   ];
 
   let lastError=null;
   for(const attempt of attempts){
-    const req=createFetchWithTimeout(GS_URL,{method:'POST',headers:attempt.headers,body:attempt.body},6000);
+    const url=attempt.url||GS_URL;
+    const fetchOpts=attempt.method==='GET'
+      ? {method:'GET', cache:'no-store', redirect:'follow'}
+      : {method:'POST', headers:attempt.headers, body:attempt.body, cache:'no-store', redirect:'follow'};
+
+    const controller=new AbortController();
+    const timer=setTimeout(()=>controller.abort(),10000);
     try{
-      const res=await req.promise;
+      const res=await fetch(url,{...fetchOpts,signal:controller.signal});
+      clearTimeout(timer);
       const text=await res.text();
       if(!res.ok){
         lastError=`HTTP ${res.status}: ${text}`;
@@ -97,21 +114,17 @@ async function gsPost(action,payload,options={}){
       }
       return true;
     }catch(e){
+      clearTimeout(timer);
       lastError=e.name==='AbortError' ? `timed out: ${action}` : String(e);
+      console.warn(`gsPost attempt failed (${attempt.method}):`, lastError);
       continue;
-    } finally {
-      req.cancel();
     }
   }
 
   if(lastError){
     console.error('gsPost error:',lastError);
     if(showToast){
-      if(window.location.protocol==='file:'){
-        toast('⚠️ เปิดหน้าเว็บจากไฟล์ local (file://) ทำให้เรียก Google Apps Script ไม่ได้ กรุณาเปิดผ่านเว็บเซิร์ฟเวอร์ เช่น http://localhost:8000','error');
-      } else {
-        toast('⚠️ ไม่สามารถเชื่อมต่อ Google Sheet ได้ กรุณาตรวจ URL Apps Script / Deployment / Permissions','error');
-      }
+      toast('⚠️ ไม่สามารถเชื่อมต่อ Google Sheet ได้ กรุณาตรวจ URL Apps Script / Deployment / Permissions','error');
     }
   }
   return false;
