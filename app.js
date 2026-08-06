@@ -1826,9 +1826,3 @@ async function initData(){
   showView('dashboard');
 }
 window.addEventListener('DOMContentLoaded',initData);
-</script>
-
-
-
-</body>
-</html>
