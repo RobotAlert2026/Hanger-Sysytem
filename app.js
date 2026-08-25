@@ -1119,7 +1119,7 @@ function renderSettingsPage(){
   const newEmailInput=document.getElementById('email-new-input');if(newEmailInput)newEmailInput.value='';
   renderEmailRecipientList();
   // LINE settings
-  const lineTokenEl = document.getElementById('line-channel-token'); if(lineTokenEl) lineTokenEl.value = settings.lineChannelToken || '';
+  const lineTokenEl = document.getElementById('line-channel-token'); if(lineTokenEl) lineTokenEl.value = getLineChannelToken();
   const lineNewGroupInput=document.getElementById('line-new-group'); if(lineNewGroupInput) lineNewGroupInput.value='';
   renderLineGroupList();
 }
@@ -1260,6 +1260,9 @@ function parseLineGroupIds(value){
 function normalizeLineGroupId(value){
   return String(value||'').trim();
 }
+function getLineChannelToken(){
+  return String(settings.lineChannelToken||'').trim().split(/\s+/)[0]||'';
+}
 function getLineGroupIds(){
   const explicit=parseLineGroupIds(settings.lineGroupIds||'');
   if(explicit.length){
@@ -1377,7 +1380,7 @@ function buildIssueNotificationPayload(type, issue){
 }
 function getLineNotificationPayload(type, issue, groupIds, extra={}){
   const normalized=[...new Set(parseLineGroupIds(Array.isArray(groupIds)?groupIds.join(', '):String(groupIds||'')))];
-  const channelToken=settings.lineChannelToken||'';
+  const channelToken=getLineChannelToken();
   return {
     type,
     groupIds: normalized,
@@ -1385,12 +1388,24 @@ function getLineNotificationPayload(type, issue, groupIds, extra={}){
     message: extra.message||issue?.desc||'',
     groupId: normalized[0]||'',
     channelAccessToken: channelToken,
-    lineChannelToken: channelToken
+    lineChannelToken: channelToken,
+    lineToken: channelToken,
+    channelToken,
+    token: channelToken,
+    to: normalized[0]||'',
+    destination: normalized[0]||'',
+    destinationId: normalized[0]||''
   };
 }
 async function sendLineNotificationWithFallback(type, issue, groupIds, extra={}){
   const payload=getLineNotificationPayload(type, issue, groupIds, extra);
   if(!payload.groupIds.length) return false;
+
+  const testResults=await Promise.allSettled(payload.groupIds.map(gid=>{
+    const singlePayload={...payload,groupIds:[gid],groupId:gid,to:gid,destination:gid,destinationId:gid};
+    return gsPost('sendTestLine',singlePayload,{showToast:false});
+  }));
+  if(testResults.some(r=>r.status==='fulfilled'&&r.value===true)) return true;
 
   let anyOk=false;
   for(const gid of payload.groupIds){
@@ -1406,7 +1421,13 @@ async function sendLineNotificationWithFallback(type, issue, groupIds, extra={})
     groupIds: payload.groupIds||[],
     groupId: payload.groupId||payload.groupIds[0]||'',
     channelAccessToken: payload.channelAccessToken||'',
-    lineChannelToken: payload.lineChannelToken||''
+    lineChannelToken: payload.lineChannelToken||'',
+    lineToken: payload.lineToken||'',
+    channelToken: payload.channelToken||'',
+    token: payload.token||'',
+    to: payload.to||payload.groupId||'',
+    destination: payload.destination||payload.groupId||'',
+    destinationId: payload.destinationId||payload.groupId||''
   };
   return await gsPost('sendTestLine', fallbackPayload, {showToast:false});
 }
@@ -1423,14 +1444,16 @@ async function notifyCriticalIssue(issue){
   if(shouldSendEmail){
     sent=await sendEmailNotificationWithFallback({type:'criticalIssue',recipients,subject:notification.subject,message:notification.message})||sent;
   }
-  if(settings.lineChannelToken&&lineGroupIds.length){
-    sent=await sendLineNotificationWithFallback('criticalIssue', issue, lineGroupIds, notification)||sent;
+  if(getLineChannelToken()&&lineGroupIds.length){
+    const lineSent=await sendLineNotificationWithFallback('criticalIssue', issue, lineGroupIds, notification);
+    if(!lineSent) console.error('LINE notification failed for issue',issue.id);
+    sent=lineSent||sent;
   }
   return sent;
 }
 
 function saveLineSettings(){
-  const token=document.getElementById('line-channel-token')?.value.trim()||'';
+  const token=String(document.getElementById('line-channel-token')?.value||'').trim().split(/\s+/)[0]||'';
   const enabled = token && getLineGroupIds().length;
   settings.lineChannelToken=token;
   saveLineGroupIds(getLineGroupIds());
@@ -1455,23 +1478,26 @@ async function notifyIssueResolved(issue){
   if(recipients.length){
     sent=await sendEmailNotificationWithFallback({type:'issueResolved',recipients,subject:notification.subject,message:notification.message})||sent;
   }
-  if(settings.lineChannelToken&&lineGroupIds.length){
-    sent=await sendLineNotificationWithFallback('issueResolved', issue, lineGroupIds, notification)||sent;
+  if(getLineChannelToken()&&lineGroupIds.length){
+    const lineSent=await sendLineNotificationWithFallback('issueResolved', issue, lineGroupIds, notification);
+    if(!lineSent) console.error('LINE resolved notification failed for issue',issue.id);
+    sent=lineSent||sent;
   }
   return sent;
 }
 
 async function sendTestLine(){
   const groupIds=getLineGroupIds();
-  if(!settings.lineChannelToken||!groupIds.length){toast('กรุณากรอก Channel Token และ Group ID อย่างน้อยหนึ่งกลุ่มก่อนส่งทดสอบ','error');return}
+  if(!getLineChannelToken()||!groupIds.length){toast('กรุณากรอก Channel Token และ Group ID อย่างน้อยหนึ่งกลุ่มก่อนส่งทดสอบ','error');return}
   const status=document.getElementById('line-notification-status'); if(status)status.textContent='📨 กำลังส่ง...';
 
   let anyOk=false;
   for(const gid of groupIds){
-    const token=settings.lineChannelToken||'';
+    const token=getLineChannelToken();
     const ok=await gsPost('sendTestLine',{
       type:'test',message:'ทดสอบการแจ้งเตือนจาก Hanger PM',groupIds:[gid],groupId:gid,
-      channelAccessToken:token,lineChannelToken:token
+      channelAccessToken:token,lineChannelToken:token,lineToken:token,channelToken:token,token,
+      to:gid,destination:gid,destinationId:gid
     });
     if(ok) anyOk=true;
   }
