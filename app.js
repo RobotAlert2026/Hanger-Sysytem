@@ -1452,6 +1452,70 @@ async function notifyIssueResolved(issue){
   }
 }
 
+function notificationSentToday(kind){
+  const key=`hanger-pm-notification-${kind}-${today()}`;
+  try{return localStorage.getItem(key)==='1'}catch(e){return false}
+}
+function markNotificationSentToday(kind){
+  const key=`hanger-pm-notification-${kind}-${today()}`;
+  try{localStorage.setItem(key,'1')}catch(e){console.warn('notification dedupe unavailable',e)}
+}
+async function sendScheduledNotifications(){
+  const recipients=validEmailRecipients(String(settings.emailRecipients||''))||[];
+  const lineGroupIds=getLineGroupIds();
+  const overdueMachines=MACHINES.filter(m=>isOverdue(m.id));
+  const dateLabel=fmt(today());
+
+  if(settings.emailOverdue==='true'||settings.emailOverdue===true){
+    if((recipients.length||lineGroupIds.length)&&overdueMachines.length&&!notificationSentToday('overdue')){
+      const message=[
+        `วันที่: ${dateLabel}`,
+        `มีเครื่องเกินกำหนด PM ${overdueMachines.length} เครื่อง:`,
+        overdueMachines.map(m=>`- ${m.name}`).join('\n')
+      ].join('\n');
+      let ok=false;
+      if(recipients.length){
+        ok=await sendEmailNotificationWithFallback({
+          type:'overduePM',recipients,subject:`[Hanger PM] มีเครื่องเกินกำหนด PM ${overdueMachines.length} เครื่อง`,message
+        });
+      }
+      if(settings.lineChannelToken&&lineGroupIds.length){
+        const lineOk=await sendLineNotificationWithFallback('overduePM',null,lineGroupIds,{
+          subject:`[Hanger PM] มีเครื่องเกินกำหนด PM ${overdueMachines.length} เครื่อง`,message
+        });
+        ok=ok||lineOk;
+      }
+      if(ok)markNotificationSentToday('overdue');
+    }
+  }
+
+  if(settings.emailDaily==='true'||settings.emailDaily===true){
+    if((recipients.length||lineGroupIds.length)&&!notificationSentToday('daily')){
+      const todayRecords=pmRecords.filter(r=>r.date===today());
+      const openIssues=issues.filter(i=>i.status!=='closed');
+      const message=[
+        `สรุปประจำวันที่ ${dateLabel}`,
+        `PM วันนี้: ${todayRecords.length} รายการ`,
+        `เครื่องเกินกำหนด: ${overdueMachines.length} เครื่อง`,
+        `ปัญหาค้าง: ${openIssues.length} รายการ`
+      ].join('\n');
+      let ok=false;
+      if(recipients.length){
+        ok=await sendEmailNotificationWithFallback({
+          type:'dailySummary',recipients,subject:`[Hanger PM] สรุปประจำวันที่ ${dateLabel}`,message
+        });
+      }
+      if(settings.lineChannelToken&&lineGroupIds.length){
+        const lineOk=await sendLineNotificationWithFallback('dailySummary',null,lineGroupIds,{
+          subject:`[Hanger PM] สรุปประจำวันที่ ${dateLabel}`,message
+        });
+        ok=ok||lineOk;
+      }
+      if(ok)markNotificationSentToday('daily');
+    }
+  }
+}
+
 async function sendTestLine(){
   const groupIds=getLineGroupIds();
   if(!settings.lineChannelToken||!groupIds.length){toast('กรุณากรอก Channel Token และ Group ID อย่างน้อยหนึ่งกลุ่มก่อนส่งทดสอบ','error');return}
@@ -1838,5 +1902,11 @@ async function initData(){
   populateIssueMachineFilter();
   renderDashboard();
   showView('dashboard');
+  void sendScheduledNotifications().catch(e=>console.error('sendScheduledNotifications failed',e));
+  if(!window.__hangerNotificationTimer){
+    window.__hangerNotificationTimer=setInterval(()=>{
+      void sendScheduledNotifications().catch(e=>console.error('sendScheduledNotifications failed',e));
+    },5*60*1000);
+  }
 }
 window.addEventListener('DOMContentLoaded',initData);
