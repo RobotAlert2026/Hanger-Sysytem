@@ -1377,12 +1377,15 @@ function buildIssueNotificationPayload(type, issue){
 }
 function getLineNotificationPayload(type, issue, groupIds, extra={}){
   const normalized=[...new Set(parseLineGroupIds(Array.isArray(groupIds)?groupIds.join(', '):String(groupIds||'')))];
+  const channelToken=settings.lineChannelToken||'';
   return {
     type,
     groupIds: normalized,
     subject: extra.subject||`[Hanger PM] ${type}`,
     message: extra.message||issue?.desc||'',
-    groupId: normalized[0]||''
+    groupId: normalized[0]||'',
+    channelAccessToken: channelToken,
+    lineChannelToken: channelToken
   };
 }
 async function sendLineNotificationWithFallback(type, issue, groupIds, extra={}){
@@ -1401,7 +1404,9 @@ async function sendLineNotificationWithFallback(type, issue, groupIds, extra={})
     type,
     message: payload.message||issue?.desc||'',
     groupIds: payload.groupIds||[],
-    groupId: payload.groupId||payload.groupIds[0]||''
+    groupId: payload.groupId||payload.groupIds[0]||'',
+    channelAccessToken: payload.channelAccessToken||'',
+    lineChannelToken: payload.lineChannelToken||''
   };
   return await gsPost('sendTestLine', fallbackPayload, {showToast:false});
 }
@@ -1414,12 +1419,14 @@ async function notifyCriticalIssue(issue){
   const notification=buildIssueNotificationPayload('criticalIssue', issue);
   const lineGroupIds=getLineGroupIds();
   const shouldSendEmail=enabled && recipients.length && parseSeverity(issue.severity)>=3;
+  let sent=false;
   if(shouldSendEmail){
-    await sendEmailNotificationWithFallback({type:'criticalIssue',recipients,subject:notification.subject,message:notification.message});
+    sent=await sendEmailNotificationWithFallback({type:'criticalIssue',recipients,subject:notification.subject,message:notification.message})||sent;
   }
   if(settings.lineChannelToken&&lineGroupIds.length){
-    sendLineNotificationWithFallback('criticalIssue', issue, lineGroupIds, notification).catch(e=>console.error('LINE notify failed',e));
+    sent=await sendLineNotificationWithFallback('criticalIssue', issue, lineGroupIds, notification)||sent;
   }
+  return sent;
 }
 
 function saveLineSettings(){
@@ -1444,76 +1451,14 @@ async function notifyIssueResolved(issue){
   const recipients=validEmailRecipients(String(settings.emailRecipients||''))||[];
   const notification=buildIssueNotificationPayload('issueResolved', issue);
   const lineGroupIds=getLineGroupIds();
+  let sent=false;
   if(recipients.length){
-    await sendEmailNotificationWithFallback({type:'issueResolved',recipients,subject:notification.subject,message:notification.message});
+    sent=await sendEmailNotificationWithFallback({type:'issueResolved',recipients,subject:notification.subject,message:notification.message})||sent;
   }
   if(settings.lineChannelToken&&lineGroupIds.length){
-    sendLineNotificationWithFallback('issueResolved', issue, lineGroupIds, notification).catch(e=>console.error('LINE notify failed',e));
+    sent=await sendLineNotificationWithFallback('issueResolved', issue, lineGroupIds, notification)||sent;
   }
-}
-
-function notificationSentToday(kind){
-  const key=`hanger-pm-notification-${kind}-${today()}`;
-  try{return localStorage.getItem(key)==='1'}catch(e){return false}
-}
-function markNotificationSentToday(kind){
-  const key=`hanger-pm-notification-${kind}-${today()}`;
-  try{localStorage.setItem(key,'1')}catch(e){console.warn('notification dedupe unavailable',e)}
-}
-async function sendScheduledNotifications(){
-  const recipients=validEmailRecipients(String(settings.emailRecipients||''))||[];
-  const lineGroupIds=getLineGroupIds();
-  const overdueMachines=MACHINES.filter(m=>isOverdue(m.id));
-  const dateLabel=fmt(today());
-
-  if(settings.emailOverdue==='true'||settings.emailOverdue===true){
-    if((recipients.length||lineGroupIds.length)&&overdueMachines.length&&!notificationSentToday('overdue')){
-      const message=[
-        `วันที่: ${dateLabel}`,
-        `มีเครื่องเกินกำหนด PM ${overdueMachines.length} เครื่อง:`,
-        overdueMachines.map(m=>`- ${m.name}`).join('\n')
-      ].join('\n');
-      let ok=false;
-      if(recipients.length){
-        ok=await sendEmailNotificationWithFallback({
-          type:'overduePM',recipients,subject:`[Hanger PM] มีเครื่องเกินกำหนด PM ${overdueMachines.length} เครื่อง`,message
-        });
-      }
-      if(settings.lineChannelToken&&lineGroupIds.length){
-        const lineOk=await sendLineNotificationWithFallback('overduePM',null,lineGroupIds,{
-          subject:`[Hanger PM] มีเครื่องเกินกำหนด PM ${overdueMachines.length} เครื่อง`,message
-        });
-        ok=ok||lineOk;
-      }
-      if(ok)markNotificationSentToday('overdue');
-    }
-  }
-
-  if(settings.emailDaily==='true'||settings.emailDaily===true){
-    if((recipients.length||lineGroupIds.length)&&!notificationSentToday('daily')){
-      const todayRecords=pmRecords.filter(r=>r.date===today());
-      const openIssues=issues.filter(i=>i.status!=='closed');
-      const message=[
-        `สรุปประจำวันที่ ${dateLabel}`,
-        `PM วันนี้: ${todayRecords.length} รายการ`,
-        `เครื่องเกินกำหนด: ${overdueMachines.length} เครื่อง`,
-        `ปัญหาค้าง: ${openIssues.length} รายการ`
-      ].join('\n');
-      let ok=false;
-      if(recipients.length){
-        ok=await sendEmailNotificationWithFallback({
-          type:'dailySummary',recipients,subject:`[Hanger PM] สรุปประจำวันที่ ${dateLabel}`,message
-        });
-      }
-      if(settings.lineChannelToken&&lineGroupIds.length){
-        const lineOk=await sendLineNotificationWithFallback('dailySummary',null,lineGroupIds,{
-          subject:`[Hanger PM] สรุปประจำวันที่ ${dateLabel}`,message
-        });
-        ok=ok||lineOk;
-      }
-      if(ok)markNotificationSentToday('daily');
-    }
-  }
+  return sent;
 }
 
 async function sendTestLine(){
@@ -1523,7 +1468,11 @@ async function sendTestLine(){
 
   let anyOk=false;
   for(const gid of groupIds){
-    const ok=await gsPost('sendTestLine',{type:'test',message:'ทดสอบการแจ้งเตือนจาก Hanger PM',groupIds:[gid],groupId:gid});
+    const token=settings.lineChannelToken||'';
+    const ok=await gsPost('sendTestLine',{
+      type:'test',message:'ทดสอบการแจ้งเตือนจาก Hanger PM',groupIds:[gid],groupId:gid,
+      channelAccessToken:token,lineChannelToken:token
+    });
     if(ok) anyOk=true;
   }
 
@@ -1902,11 +1851,5 @@ async function initData(){
   populateIssueMachineFilter();
   renderDashboard();
   showView('dashboard');
-  void sendScheduledNotifications().catch(e=>console.error('sendScheduledNotifications failed',e));
-  if(!window.__hangerNotificationTimer){
-    window.__hangerNotificationTimer=setInterval(()=>{
-      void sendScheduledNotifications().catch(e=>console.error('sendScheduledNotifications failed',e));
-    },5*60*1000);
-  }
 }
 window.addEventListener('DOMContentLoaded',initData);
