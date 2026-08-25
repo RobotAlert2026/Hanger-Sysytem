@@ -1,4 +1,4 @@
-const GS_URL='https://script.google.com/macros/s/AKfycbzdDUpDHE3wFSdxZEsxSX1IWuDkbGr9FS0sGfzcZYPGjDaOjGdvT5Zqn0DpQJ4E70lg/exec';
+const GS_URL=window.HANGER_GS_URL||'https://script.google.com/macros/s/AKfycbzdDUpDHE3wFSdxZEsxSX1IWuDkbGr9FS0sGfzcZYPGjDaOjGdvT5Zqn0DpQJ4E70lg/exec';
 const DATA_CACHE_KEY='hanger-pm-cache-v1';
 const DATA_CACHE_TTL_MS=5*60*1000;
 const DEFAULT_FETCH_TIMEOUT_MS=15000;
