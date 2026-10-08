@@ -377,6 +377,20 @@ input[type=date]::-webkit-calendar-picker-indicator{filter:invert(.7) sepia(1) s
 .modal-body{padding:18px 22px;display:flex;flex-direction:column;gap:13px}
 .modal-footer{padding:0 22px 18px;display:flex;justify-content:flex-end;gap:8px}
 .modal-wide{max-width:680px}
+.admin-login-confirm-modal{max-width:420px;box-shadow:0 18px 60px rgba(0,0,0,.35)}
+.admin-login-confirm-modal .modal-header{padding:22px 22px 0}
+.admin-login-icon{
+  width:48px;height:48px;border-radius:14px;display:grid;place-items:center;
+  background:rgba(245,166,35,.13);font-size:23px;
+}
+.admin-login-confirm-modal .modal-body{padding-top:16px}
+.admin-login-confirm-modal .modal-title{font-size:19px}
+.admin-login-confirm-copy{margin-top:7px;color:var(--muted);font-size:13px;line-height:1.7}
+.admin-login-account{
+  display:flex;align-items:center;gap:9px;padding:10px 12px;
+  border:1px solid var(--border);border-radius:8px;background:var(--surface2);
+  color:var(--text);font-size:12px;overflow-wrap:anywhere;
+}
 
 /* ══ TABS ══ */
 .tabs{display:flex;gap:3px;padding:3px;background:var(--surface2);border-radius:8px;width:fit-content}

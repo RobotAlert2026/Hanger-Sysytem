@@ -234,14 +234,7 @@ function confirmNewPin(){
 
 function showView(name){
   if(name==='settings'&&!isSettingsAdmin()){
-    signInSettingsAdmin('settings').then(async email=>{
-      if(!email)return;
-      await loadProtectedSettings();
-      showView('settings');
-    }).catch(error=>{
-      console.error('Settings sign-in failed:',error);
-      toast(`เข้าสู่หน้าตั้งค่าไม่สำเร็จ: ${error.message}`,'error');
-    });
+    openModal('modal-admin-login-confirm');
     return;
   }
   if(name==='settings'){
@@ -265,6 +258,22 @@ function showView(name){
   if(name==='analytics') renderAnalytics();
   if(name==='history'){populateHistoryMachineFilter();renderHistory()}
   if(name==='settings') renderSettingsPage();
+}
+async function confirmSettingsLogin(){
+  const button=document.querySelector('#modal-admin-login-confirm .modal-footer .btn-primary');
+  if(button){button.disabled=true;button.textContent='กำลังเข้าสู่ระบบ...'}
+  try{
+    const email=await signInSettingsAdmin();
+    if(!email)return;
+    await loadProtectedSettings();
+    closeModal('modal-admin-login-confirm');
+    showView('settings');
+  }catch(error){
+    console.error('Settings sign-in failed:',error);
+    toast(`เข้าสู่หน้าตั้งค่าไม่สำเร็จ: ${error.message}`,'error');
+  }finally{
+    if(button){button.disabled=false;button.textContent='เข้าสู่ระบบแอดมิน'}
+  }
 }
 
 function selectShift(s){

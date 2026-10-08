@@ -512,6 +512,25 @@ if(window.location.protocol==='http:'&&window.location.hostname==='127.0.0.1'){
 </div>
 
 <!-- ══ ADMIN PIN MODAL ══ -->
+<div class="overlay" id="modal-admin-login-confirm" role="dialog" aria-modal="true" aria-labelledby="admin-login-confirm-title">
+  <div class="modal admin-login-confirm-modal">
+    <div class="modal-header">
+      <div class="admin-login-icon" aria-hidden="true">🔐</div>
+      <button type="button" class="btn-icon" onclick="closeModal('modal-admin-login-confirm')" aria-label="ปิด">✕</button>
+    </div>
+    <div class="modal-body">
+      <div>
+        <div class="modal-title" id="admin-login-confirm-title">เข้าสู่ระบบผู้ดูแล</div>
+        <p class="admin-login-confirm-copy">หน้านี้สำหรับผู้ดูแลระบบ กรุณายืนยันเพื่อเข้าสู่ระบบด้วยบัญชี Admin</p>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-secondary" onclick="closeModal('modal-admin-login-confirm')">ยกเลิก</button>
+      <button type="button" class="btn btn-primary" onclick="confirmSettingsLogin()">เข้าสู่ระบบแอดมิน</button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="modal-admin-pin">
   <div class="modal" style="max-width:400px">
     <div class="modal-header"><div class="modal-title">🔐 ตรวจสอบ Admin PIN</div><button class="btn-icon" onclick="closeModal('modal-admin-pin')">✕</button></div>
@@ -728,7 +747,7 @@ if(window.location.protocol==='http:'&&window.location.hostname==='127.0.0.1'){
 <div id="pm-card-tooltip" class="pm-tooltip"></div>
 
 <script>
-window.__HANGER_APP_VERSION__='2026-10-09-2';
+window.__HANGER_APP_VERSION__='2026-10-09-3';
 const params=new URLSearchParams(window.location.search);
 if(params.get('gs_url')) window.HANGER_GS_URL=params.get('gs_url');
 </script>
