@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Hanger PM System Desktop Online </title>
+<script>
+if(window.location.protocol==='http:'&&window.location.hostname==='127.0.0.1'){
+  const localUrl=new URL(window.location.href);
+  localUrl.hostname='localhost';
+  window.location.replace(localUrl.href);
+}
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -59,6 +66,8 @@
   </div>
 
   <div class="sidebar-bottom">
+    <div id="google_translate_element" class="google-translate-widget" aria-label="เลือกภาษา"></div>
+    <button type="button" class="translate-reset-btn notranslate" translate="no" onclick="resetGoogleTranslate()" aria-label="กลับไปใช้ภาษาไทย">ไทย</button>
     <button class="sync-btn" onclick="initData()" id="sync-btn">
       <span class="si">🔄</span> Sync ข้อมูล
     </button>
@@ -404,6 +413,8 @@
       <div class="page-header" style="padding-left:0;padding-right:0">
         <div><div class="page-title">ตั้งค่า<span>เครื่องจักร</span></div><div class="page-sub">จัดการรายชื่อเครื่อง Hanger และรอบ PM</div></div>
         <div class="header-actions">
+          <span id="settings-admin-email" style="font-size:11px;color:var(--muted)"></span>
+          <button class="btn btn-secondary" onclick="signOutSettingsAdmin()">ออกจากระบบ Gmail</button>
           <button class="btn btn-primary" onclick="openAddMachineModal()">➕ เพิ่มเครื่อง</button>
           <button class="btn btn-secondary" onclick="resetMachinesToDefault()">↩ ค่าเริ่มต้น</button>
         </div>
@@ -667,7 +678,7 @@
         <div style="display:flex;gap:10px;align-items:flex-start"><span style="color:var(--muted);width:80px;flex-shrink:0;padding-top:1px">รายละเอียด</span><span id="cc-desc" style="color:var(--muted);line-height:1.5">—</span></div>
       </div>
       <div style="margin-top:12px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:8px;padding:10px 13px;font-size:12px;color:var(--success)">
-        ⚠️ เมื่อยืนยันแล้ว สถานะจะเปลี่ยนเป็น "แก้ไขแล้ว" และบันทึกลง Google Server
+        ⚠️ เมื่อยืนยันแล้ว สถานะจะเปลี่ยนเป็น "แก้ไขแล้ว" และบันทึกลง Firebase
       </div>
     </div>
     <div class="modal-footer">
@@ -717,13 +728,46 @@
 <div id="pm-card-tooltip" class="pm-tooltip"></div>
 
 <script>
-// Force reload of latest script content in browser caches.
-window.__HANGER_APP_VERSION__='2026-08-04-1';
+window.__HANGER_APP_VERSION__='2026-10-09-2';
 const params=new URLSearchParams(window.location.search);
-if(params.get('gs_url')){
-  window.HANGER_GS_URL=params.get('gs_url');
-}
+if(params.get('gs_url')) window.HANGER_GS_URL=params.get('gs_url');
 </script>
 <script src="desktop.data.js"></script>
 <script src="desktop.ui.js"></script>
 <script src="app.js"></script>
+<script>
+function googleTranslateElementInit(){
+  new google.translate.TranslateElement({
+    pageLanguage:'th',
+    includedLanguages:'en,zh-CN',
+    autoDisplay:false
+  },'google_translate_element');
+}
+function resetGoogleTranslate(){
+  const activeView=document.querySelector('.view.active');
+  if(activeView?.id){
+    sessionStorage.setItem('hanger-translate-return-view',activeView.id.replace(/^view-/,''));
+  }
+  if(typeof isAdminAuthenticated==='function'&&isAdminAuthenticated()){
+    sessionStorage.setItem('hanger-admin-authenticated-at',String(adminAuthenticatedAt));
+  }
+  const hostname=window.location.hostname;
+  const domains=[hostname];
+  if(hostname.includes('.')&&!/^\d{1,3}(\.\d{1,3}){3}$/.test(hostname)){
+    domains.push(`.${hostname}`);
+  }
+  domains.forEach(domain=>{
+    document.cookie=`googtrans=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=${domain}`;
+  });
+  document.cookie='googtrans=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/';
+  window.location.reload();
+}
+</script>
+<script src="https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
+<script>
+// Keep frequently refreshed clock and shift labels stable when Google Translate is active.
+['clock-time','clock-date','clock-shift-badge','clock-remain','sb-clock-time','sb-shift-badge','sb-remain','dash-shift-badge','dash-shift-remain','pm-day-count','pm-night-count','ov-day-count','ov-night-count'].forEach(function(id){
+  var el=document.getElementById(id);
+  if(el){el.setAttribute('translate','no');el.classList.add('notranslate')}
+});
+</script>

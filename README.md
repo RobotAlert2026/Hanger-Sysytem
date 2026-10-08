@@ -1,7 +1,7 @@
 # ⚙️ Hanger PM System
 
 ระบบบริหารจัดการ Preventive Maintenance (PM) สำหรับเครื่อง Hanger  
-พัฒนาด้วย Vanilla HTML/CSS/JavaScript เชื่อมต่อ Google Sheets เป็น Database  
+พัฒนาด้วย Vanilla HTML/CSS/JavaScript เชื่อมต่อ Firebase Firestore เป็น Database  
 เปิดใช้งานผ่าน GitHub Pages โดยไม่ต้องมี Backend Server
 
 ---
@@ -53,43 +53,36 @@ Browser (GitHub Pages)
     ├── index.html  ──  style.css
     │                   app.js
     │
-    └── fetch() ──► Google Apps Script (Web App)
-                        │
-                        └── Google Sheets (Database)
-                                ├── Machines
-                                ├── PM Records
-                                ├── Issues
-                                └── Settings
+    ├── Firebase Firestore
+    │   ├── machines
+    │   ├── pmRecords
+    │   ├── issues
+    │   └── settings
+    │
+    └── Google Apps Script (เฉพาะการส่ง Email/LINE)
 ```
 
-ข้อมูลทั้งหมดเก็บใน **Google Sheets** ผ่าน **Google Apps Script** ที่ Deploy เป็น Web App  
-ไม่มี Backend Server / ไม่มี Database แยก / ไม่มีค่าใช้จ่ายรายเดือน
+ข้อมูลหลักเก็บใน **Firebase Firestore** ส่วน Google Apps Script ยังคงใช้เป็น backend สำหรับส่ง Email/LINE
 
 ---
 
 ## 🚀 การติดตั้ง
 
-### 1. ตั้งค่า Google Apps Script
+### 1. ตั้งค่า Firebase Firestore
 
-1. สร้าง Google Sheets ใหม่
-2. เปิด **Extensions → Apps Script**
-3. วางโค้ด Apps Script สำหรับจัดการ Sheet (CRUD: PM, Issues, Machines, Settings)
-4. Deploy → **New Deployment** → Type: **Web App**
-   - Execute as: **Me**
-   - Who has access: **Anyone**
-5. คัดลอก **Deployment URL**
+1. เปิด Firebase Console ของโปรเจกต์ `hanger-system-b67f8`
+2. ไปที่ **Build → Firestore Database** แล้วสร้างฐานข้อมูล
+3. ไปที่ **Build → Authentication → Sign-in method** แล้วเปิด **Google**
+4. ใน **Authentication → Settings → Authorized domains** เพิ่มโดเมนที่ใช้โฮสต์เว็บ สำหรับ VS Code Go Live ให้เปิดเว็บด้วย `localhost` (หน้าเว็บจะเปลี่ยนจาก `127.0.0.1` ให้อัตโนมัติ)
+5. ตั้งค่า Firestore Rules โดยคัดลอก [firestore.rules](./firestore.rules) ไปที่แท็บ **Rules** แล้ว Publish
 
-### 2. อัปเดต Deployment URL
+หน้า Settings และการแก้ไขข้อมูล `machines`/`settings` อนุญาตเฉพาะ Google account ที่ยืนยันอีเมลแล้วและตรงกับ Gmail ผู้ดูแล `robotalert.notification2026@gmail.com` หากเปลี่ยนผู้ดูแล ต้องแก้ทั้ง `FIREBASE_SETTINGS_ADMINS` ใน `desktop.data.js` และอีเมลใน [firestore.rules](./firestore.rules) ให้ตรงกันก่อน Publish Rules ใหม่ ส่วนข้อมูล `pmRecords` และ `issues` ยังคงอ่าน/เขียนสาธารณะตามที่เลือกไว้
 
-ตอนนี้แอปรับ URL จากตัวแปร `window.HANGER_GS_URL` หรือ query string `?gs_url=https://...` ได้ทันที โดยไม่ต้องแก้โค้ด
+### 2. การเชื่อมต่อ Google Apps Script
 
-ตัวอย่าง:
+Google Apps Script เดิมยังต้อง Deploy และเข้าถึงได้สำหรับส่ง Email/LINE แจ้งเตือนเท่านั้น ข้อมูลเครื่องจักร, PM, ปัญหา และการตั้งค่าใช้งาน Firebase Firestore แล้ว
 
-```text
-https://<username>.github.io/<repo>/?gs_url=https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec
-```
-
-หรือแก้ในไฟล์ [Hanger PM System  Desktop.data.js](Hanger%20PM%20System%20%20Desktop.data.js) หากต้องการตั้งค่าแบบถาวร
+สามารถกำหนด URL ของ Google Apps Script สำหรับการแจ้งเตือนผ่าน `window.HANGER_GS_URL` หรือ query string `?gs_url=<URL>` ได้
 
 ### 3. Deploy ผ่าน GitHub Pages
 
@@ -207,7 +200,7 @@ git push -u origin main
 ## 🛠️ Tech Stack
 
 - **Frontend**: Vanilla HTML5 / CSS3 / JavaScript (ES2020+)
-- **Database**: Google Sheets via Google Apps Script
+- **Database**: Firebase Firestore
 - **Charts**: Chart.js 4.4.1
 - **Fonts**: Sarabun, IBM Plex Mono (Google Fonts)
 - **Hosting**: GitHub Pages (Static)
@@ -223,7 +216,7 @@ git push -u origin main
 
 ## 🗒️ Version
 
-`v2026-08-04` — ดูที่ตัวแปร `window.__HANGER_APP_VERSION__` ใน `app.js`
+`v2026-10-09` — ดูที่ตัวแปร `window.__HANGER_APP_VERSION__` ใน `index.html`
 
 ---
 

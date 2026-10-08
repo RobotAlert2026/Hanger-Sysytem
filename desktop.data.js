@@ -1,13 +1,203 @@
 const GS_URL=window.HANGER_GS_URL||'https://script.google.com/macros/s/AKfycbzdDUpDHE3wFSdxZEsxSX1IWuDkbGr9FS0sGfzcZYPGjDaOjGdvT5Zqn0DpQJ4E70lg/exec';
+const FIREBASE_CONFIG={
+  apiKey:'AIzaSyC69wikJ7pYXPiZZmcz785Mb-yW1RCu3Sg',
+  authDomain:'hanger-system-b67f8.firebaseapp.com',
+  projectId:'hanger-system-b67f8',
+  storageBucket:'hanger-system-b67f8.firebasestorage.app',
+  messagingSenderId:'574752234159',
+  appId:'1:574752234159:web:0370fc98ce837718cf525a',
+  measurementId:'G-71KQEQVECJ'
+};
+const FIREBASE_SETTINGS_ADMINS=['robotalert.notification2026@gmail.com'];
+const PENDING_SETTINGS_SIGNIN_KEY='hanger-pending-settings-signin';
 const DATA_CACHE_KEY='hanger-pm-cache-v1';
 const DATA_CACHE_TTL_MS=5*60*1000;
-const DEFAULT_FETCH_TIMEOUT_MS=15000;
+let firebaseInstancePromise;
+let firebaseAuth=null;
+let firebaseAuthReadyPromise;
+
+function getFirebase(){
+  if(!firebaseInstancePromise){
+    firebaseInstancePromise=Promise.all([
+      import('https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js'),
+      import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js'),
+      import('https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js')
+    ]).then(([appSdk,firestoreSdk,authSdk])=>{
+      const app=appSdk.initializeApp(FIREBASE_CONFIG);
+      firebaseAuth=authSdk.getAuth(app);
+      firebaseAuthReadyPromise=new Promise((resolve,reject)=>{
+        const unsubscribe=authSdk.onAuthStateChanged(firebaseAuth,user=>{
+          unsubscribe();
+          resolve(user);
+        },error=>{
+          unsubscribe();
+          reject(error);
+        });
+      });
+      return {db:firestoreSdk.getFirestore(app),auth:firebaseAuth,...firestoreSdk,...authSdk};
+    }).catch(error=>{
+      firebaseInstancePromise=null;
+      throw new Error(`เริ่มต้น Firebase ไม่สำเร็จ: ${error.message}`);
+    });
+  }
+  return firebaseInstancePromise;
+}
+
+function describeFirebaseError(error){
+  const code=String(error?.code||'');
+  if(code.includes('permission-denied')||code.includes('insufficient-permission')){
+    return 'Firebase ปฏิเสธสิทธิ์ (permission-denied) กรุณา Publish firestore.rules เวอร์ชันล่าสุด และตรวจว่าเข้าสู่ระบบด้วย robotalert.notification2026@gmail.com';
+  }
+  if(code.includes('unauthenticated')){
+    return 'Firebase ยังไม่ได้รับสถานะล็อกอินผู้ดูแล กรุณาออกจากระบบ Google แล้วล็อกอินใหม่';
+  }
+  if(code.includes('unavailable')||code.includes('network-request-failed')){
+    return 'ติดต่อ Firebase ไม่ได้ กรุณาตรวจอินเทอร์เน็ตหรือการตั้งค่าเครือข่าย แล้วลองใหม่';
+  }
+  if(code.includes('failed-precondition')){
+    return 'Firestore ยังตั้งค่าไม่ครบ กรุณาสร้าง Firestore Database ใน Firebase Console แล้วลองใหม่';
+  }
+  return `${code?`${code}: `:''}${error?.message||String(error)}`;
+}
+
+async function getFirebaseCollection(name){
+  const {db,collection,getDocs}=await getFirebase();
+  const snapshot=await getDocs(collection(db,name));
+  return snapshot.docs.map(item=>({id:item.id,...item.data()}));
+}
+async function loadFirebaseData(){
+  await getFirebase();
+  await firebaseAuthReadyPromise;
+  const [machines,settings,pmRecords,issues]=await Promise.all([
+    getFirebaseCollection('machines'),
+    isSettingsAdmin()?getFirebaseCollection('settings'):Promise.resolve([]),
+    getFirebaseCollection('pmRecords'),
+    getFirebaseCollection('issues')
+  ]);
+  return {machines,settings,pmRecords,issues};
+}
+async function completeGoogleRedirectSignIn(){
+  const {auth,getRedirectResult,signOut}=await getFirebase();
+  const hasPendingSignIn=sessionStorage.getItem(PENDING_SETTINGS_SIGNIN_KEY)==='true';
+  let redirectResult;
+  try{
+    redirectResult=await getRedirectResult(auth);
+  }catch(error){
+    sessionStorage.removeItem(PENDING_SETTINGS_SIGNIN_KEY);
+    throw new Error(`รับผลการเข้าสู่ระบบ Google ไม่สำเร็จ: ${describeFirebaseError(error)}`);
+  }
+  await firebaseAuthReadyPromise;
+  const user=redirectResult?.user||auth.currentUser;
+  if(hasPendingSignIn){
+    sessionStorage.removeItem(PENDING_SETTINGS_SIGNIN_KEY);
+    if(!user)return;
+  }
+  if(user&&!FIREBASE_SETTINGS_ADMINS.includes(String(user.email||'').toLowerCase())){
+    await signOut(auth);
+    throw new Error(`บัญชี ${user.email||'นี้'} ไม่มีสิทธิ์ผู้ดูแล`);
+  }
+}
+function isSettingsAdmin(){
+  const email=String(firebaseAuth?.currentUser?.email||'').toLowerCase();
+  return FIREBASE_SETTINGS_ADMINS.includes(email);
+}
+async function signInSettingsAdmin(){
+  const {auth,GoogleAuthProvider,signInWithPopup,signInWithRedirect,signOut}=await getFirebase();
+  const provider=new GoogleAuthProvider();
+  provider.setCustomParameters({prompt:'select_account'});
+  sessionStorage.setItem(PENDING_SETTINGS_SIGNIN_KEY,'true');
+  try{
+    const credential=await signInWithPopup(auth,provider);
+    const email=String(credential.user.email||'').toLowerCase();
+    sessionStorage.removeItem(PENDING_SETTINGS_SIGNIN_KEY);
+    if(!FIREBASE_SETTINGS_ADMINS.includes(email)){
+      await signOut(auth);
+      throw new Error(`บัญชี ${email||'นี้'} ไม่มีสิทธิ์ผู้ดูแล`);
+    }
+    return email;
+  }catch(error){
+    if(error.code==='auth/unauthorized-domain'){
+      sessionStorage.removeItem(PENDING_SETTINGS_SIGNIN_KEY);
+      throw new Error(`Firebase ยังไม่อนุญาตโดเมน "${window.location.hostname}" ให้เข้า Authentication กรุณาเพิ่มโดเมนนี้ที่ Firebase Console → Authentication → Settings → Authorized domains แล้วลองใหม่`);
+    }
+    if(error.code==='auth/operation-not-allowed'){
+      sessionStorage.removeItem(PENDING_SETTINGS_SIGNIN_KEY);
+      throw new Error('ยังไม่ได้เปิด Google Sign-in ใน Firebase Console → Authentication → Sign-in method');
+    }
+    if(error.code==='auth/popup-blocked'||error.code==='auth/popup-closed-by-user'){
+      try{
+        await signInWithRedirect(auth,provider);
+        return;
+      }catch(redirectError){
+        sessionStorage.removeItem(PENDING_SETTINGS_SIGNIN_KEY);
+        throw new Error(`ล็อกอิน Google ไม่สำเร็จ: ${describeFirebaseError(redirectError)}`);
+      }
+    }
+    sessionStorage.removeItem(PENDING_SETTINGS_SIGNIN_KEY);
+    throw error;
+  }
+}
+async function signOutSettingsAdmin(){
+  try{
+    const {auth,signOut}=await getFirebase();
+    await signOut(auth);
+    settings={};
+    adminAuthenticatedAt=0;
+    showView('dashboard');
+    await initData();
+  }catch(error){
+    console.error('Settings sign-out failed:',error);
+    toast(`ออกจากระบบไม่สำเร็จ: ${error.message}`,'error');
+  }
+}
+async function loadProtectedSettings(){
+  if(!isSettingsAdmin()) throw new Error('ต้องเข้าสู่ระบบด้วยบัญชีผู้ดูแลก่อน');
+  const rows=await getFirebaseCollection('settings');
+  settings={};
+  rows.forEach(row=>{if(row.key)settings[row.key]=row.value});
+}
+async function saveFirebaseDocument(collectionName,id,data){
+  const {db,collection,doc,setDoc}=await getFirebase();
+  await setDoc(doc(collection(db,collectionName),String(id)),data);
+}
+async function deleteFirebaseDocument(collectionName,id){
+  const {db,collection,doc,deleteDoc}=await getFirebase();
+  await deleteDoc(doc(collection(db,collectionName),String(id)));
+}
+async function writeFirebaseBatch(operations){
+  const {db,collection,doc,writeBatch}=await getFirebase();
+  for(let offset=0;offset<operations.length;offset+=450){
+    const batch=writeBatch(db);
+    operations.slice(offset,offset+450).forEach(operation=>{
+      const reference=doc(collection(db,operation.collection),String(operation.id));
+      if(operation.delete) batch.delete(reference);
+      else batch.set(reference,operation.data);
+    });
+    await batch.commit();
+  }
+}
+
+async function reportFirebaseWrite(operation){
+  try{
+    await operation();
+    return true;
+  }catch(error){
+    console.error('Firebase write failed:',error);
+    toast(`บันทึก Firebase ไม่สำเร็จ: ${error.message}`,'error');
+    return false;
+  }
+}
 
 function readDataCache(){
   try{
     const raw=localStorage.getItem(DATA_CACHE_KEY);
     if(!raw)return null;
     const parsed=JSON.parse(raw);
+    if(Object.prototype.hasOwnProperty.call(parsed,'settings')){
+      delete parsed.settings;
+      try{localStorage.setItem(DATA_CACHE_KEY,JSON.stringify(parsed))}
+      catch(error){console.warn('Could not remove private settings from cache',error)}
+    }
     return parsed && parsed.savedAt ? parsed : null;
   }catch(e){
     console.warn('readDataCache failed',e);
@@ -16,51 +206,23 @@ function readDataCache(){
 }
 function writeDataCache(payload){
   try{
-    localStorage.setItem(DATA_CACHE_KEY, JSON.stringify({...payload,savedAt:Date.now()}));
+    const cachePayload={...payload,savedAt:Date.now()};
+    delete cachePayload.settings;
+    localStorage.setItem(DATA_CACHE_KEY, JSON.stringify(cachePayload));
   }catch(e){
     console.warn('writeDataCache failed',e);
   }
 }
 function applyCachedData(cached){
   if(!cached) return false;
-  if(Array.isArray(cached.machines) && cached.machines.length) MACHINES=cached.machines;
+  if(Array.isArray(cached.machines) && cached.machines.length){
+    MACHINES=cached.machines;
+    sortMachinesById();
+  }
   if(cached.pmCycles) pmCycles={...cached.pmCycles};
-  if(cached.settings) settings={...cached.settings};
   if(Array.isArray(cached.pmRecords)) pmRecords=cached.pmRecords;
   if(Array.isArray(cached.issues)) issues=cached.issues;
   return true;
-}
-function createFetchWithTimeout(url,options={},timeoutMs=DEFAULT_FETCH_TIMEOUT_MS){
-  const controller=new AbortController();
-  const timer=setTimeout(()=>controller.abort(),timeoutMs);
-  return {
-    promise: fetch(url,{...options,cache:'no-store',redirect:'follow',signal:controller.signal}),
-    cancel: ()=>clearTimeout(timer)
-  };
-}
-async function gsGet(action){
-  const url=`${GS_URL}?action=${encodeURIComponent(action)}`;
-  const req=createFetchWithTimeout(url,{},6000);
-  try{
-    const res=await req.promise;
-    try{
-      const data=await res.json();
-      if(data && data.error){ console.error('gsGet error:',data.error); return [] }
-      return Array.isArray(data)?data:(data.data||[]);
-    }catch(e){
-      console.error('gsGet parse/json failed:',e);
-      return [];
-    }
-  }catch(e){
-    if(e.name==='AbortError') console.error('gsGet timed out:',action);
-    else console.error('gsGet failed:',e);
-    if(window.location.protocol==='file:'){
-      toast('⚠️ เปิดหน้าเว็บจากไฟล์ local (file://) ทำให้เรียก Google Apps Script ไม่ได้ กรุณาเปิดผ่านเว็บเซิร์ฟเวอร์ เช่น http://localhost:8000','error');
-    }
-    return [];
-  } finally {
-    req.cancel();
-  }
 }
 async function gsPost(action,payload,options={}){
   const {showToast=true}=options;
@@ -124,30 +286,46 @@ async function gsPost(action,payload,options={}){
   if(lastError){
     console.error('gsPost error:',lastError);
     if(showToast){
-      toast('⚠️ ไม่สามารถเชื่อมต่อ Google Sheet ได้ กรุณาตรวจ URL Apps Script / Deployment / Permissions','error');
+      toast('⚠️ เชื่อมต่อ Google Apps Script สำหรับการแจ้งเตือนไม่สำเร็จ กรุณาตรวจ URL / Deployment / Permissions','error');
     }
   }
   return false;
 }
 
-function loadData(){return[]}
-function saveData(){}
-function loadSettings(){return{}}
-
 function savePMRecord(rec){
   rec.machineName=MACHINES.find(m=>m.id===rec.machineId)?.name||'';
-  return gsPost('savePM',rec);
+  return reportFirebaseWrite(()=>saveFirebaseDocument('pmRecords',rec.id,rec));
 }
-function deletePMRecord(id){return gsPost('deletePM',{id})}
+function deletePMRecord(id){return reportFirebaseWrite(()=>deleteFirebaseDocument('pmRecords',id))}
 function saveIssueRecord(iss){
-  return gsPost('saveIssue',{...iss, saverity:iss.severity, severity:iss.severity},{showToast:false});
+  return reportFirebaseWrite(()=>saveFirebaseDocument('issues',iss.id,{...iss,severity:iss.severity}));
 }
-function deleteIssueRecord(id){return gsPost('deleteIssue',{id})}
+function deleteIssueRecord(id){return reportFirebaseWrite(()=>deleteFirebaseDocument('issues',id))}
 function saveMachines(){
+  sortMachinesById();
   const payload=MACHINES.map(m=>({...m,pmCycleDays:pmCycles[m.id]||30}));
-  return gsPost('saveMachines',payload);
+  return reportFirebaseWrite(async()=>{
+    const existing=await getFirebaseCollection('machines');
+    const operations=[
+      ...payload.map(machine=>({collection:'machines',id:machine.id,data:machine})),
+      ...existing.filter(machine=>!payload.some(item=>String(item.id)===String(machine.id)))
+        .map(machine=>({collection:'machines',id:machine.id,delete:true}))
+    ];
+    await writeFirebaseBatch(operations);
+  });
 }
-function saveSettings(s){return gsPost('saveSettings',s)}
+function saveSettings(s){
+  return reportFirebaseWrite(async()=>{
+    if(!isSettingsAdmin()) throw new Error('ต้องเข้าสู่ระบบด้วย Gmail ผู้ดูแลก่อนบันทึกการตั้งค่า');
+    const existing=await getFirebaseCollection('settings');
+    const operations=[
+      ...Object.entries(s).map(([key,value])=>({collection:'settings',id:key,data:{key,value}})),
+      ...existing.filter(item=>!Object.prototype.hasOwnProperty.call(s,item.key||item.id))
+        .map(item=>({collection:'settings',id:item.id,delete:true}))
+    ];
+    await writeFirebaseBatch(operations);
+  });
+}
 
 function parseSeverity(v){
   if(v===null||v===undefined||v==='')return 1;

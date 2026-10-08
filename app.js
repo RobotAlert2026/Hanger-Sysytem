@@ -1092,6 +1092,8 @@ ${oi.map(i=>{const sev=parseSeverity(i.severity);const sl=['','เล็กน�
 // ══════════════════════════════════════════
 function renderSettingsPage(){
   const tbody=document.getElementById('settings-machines-tbody');if(!tbody)return;
+  const adminEmail=document.getElementById('settings-admin-email');
+  if(adminEmail)adminEmail.textContent=`เข้าสู่ระบบ: ${firebaseAuth.currentUser.email}`;
   const ym=today().slice(0,7);
   tbody.innerHTML=MACHINES.map(m=>{
     const monthCount=pmRecords.filter(r=>r.machineId===m.id&&r.date.startsWith(ym)).length;
@@ -1162,6 +1164,7 @@ function saveMachineEdit(){
   if(idVal==='new'){
     const newId=Math.max(...MACHINES.map(m=>m.id),0)+1;
     MACHINES.push({id:newId,name,model:model||`HNG-${newId*5}`});
+    sortMachinesById();
     saveMachines();closeModal('modal-edit-machine');renderSettingsPage();toast(`เพิ่มเครื่อง "${name}" แล้ว`);
   } else {
     const id=parseInt(idVal),idx=MACHINES.findIndex(m=>m.id===id);if(idx<0)return;
@@ -1794,40 +1797,37 @@ async function initData(){
   const loadEl=document.createElement('div');
   loadEl.style.cssText='position:fixed;inset:0;background:rgba(20,17,14,.94);z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;color:#f0e8dc;font-family:Sarabun,sans-serif';
   loadEl.innerHTML=`<div style="font-size:36px;animation:spin .7s linear infinite;display:inline-block">⚙️</div>
-    <div style="font-size:16px;font-weight:700">${hasFreshCache ? 'กำลังอัปเดตข้อมูลจาก Google Sheets' : 'กำลังโหลดข้อมูลจาก Google Server'}</div>
+    <div style="font-size:16px;font-weight:700">${hasFreshCache ? 'กำลังอัปเดตข้อมูลจาก Firebase' : 'กำลังโหลดข้อมูลจาก Firebase'}</div>
     <div style="font-size:12px;color:#9e8f7e">กรุณารอสักครู่...</div>
     <style>@keyframes spin{to{transform:rotate(360deg)}}</style>`;
   document.body.appendChild(loadEl);
 
   try{
-    const [machineResult,settingResult,pmResult,issueResult]=await Promise.allSettled([
-      gsGet('getMachines'),
-      gsGet('getSettings'),
-      gsGet('getPM'),
-      gsGet('getIssues')
-    ]);
-
-    const machineData=machineResult.status==='fulfilled'?machineResult.value:[];
-    const settingData=settingResult.status==='fulfilled'?settingResult.value:[];
-    const pmData=pmResult.status==='fulfilled'?pmResult.value:[];
-    const issueData=issueResult.status==='fulfilled'?issueResult.value:[];
-
-    if(machineData&&machineData.length){
-      MACHINES=machineData
-        .map(m=>({
-          id:Number(m.id)||0,
-          name:String(m.name||m.machineName||`Hanger ${String(Number(m.id)).padStart(2,'0')}`).trim(),
-          model:String(m.model||m.machineModel||`HNG-${(Number(m.id)||1)*5}`).trim()
-        }))
-        .filter(m=>m.id>0);
-      if(!MACHINES.length) MACHINES=[...DEFAULT_MACHINES];
-      machineData.forEach(m=>{pmCycles[Number(m.id)]=Number(m.pmCycleDays)||30});
+    await completeGoogleRedirectSignIn();
+    const savedAdminAuthAt=Number(sessionStorage.getItem('hanger-admin-authenticated-at'));
+    sessionStorage.removeItem('hanger-admin-authenticated-at');
+    if(isSettingsAdmin()&&savedAdminAuthAt>0&&Date.now()-savedAdminAuthAt<600000){
+      adminAuthenticatedAt=savedAdminAuthAt;
     }
+    const {machines:machineData,settings:settingData,pmRecords:pmData,issues:issueData}=await loadFirebaseData();
 
-    if(settingData&&settingData.length){
-      settings={};
-      settingData.forEach(r=>{if(r.key) settings[r.key]=r.value});
-    }
+    MACHINES=(machineData||[])
+      .map(m=>({
+        id:Number(m.id)||0,
+        name:String(m.name||m.machineName||`Hanger ${String(Number(m.id)).padStart(2,'0')}`).trim(),
+        model:String(m.model||m.machineModel||`HNG-${(Number(m.id)||1)*5}`).trim()
+      }))
+      .filter(m=>m.id>0);
+    sortMachinesById();
+    if(!MACHINES.length) MACHINES=DEFAULT_MACHINES.map(machine=>({...machine}));
+    pmCycles={};
+    MACHINES.forEach(machine=>{
+      const storedMachine=machineData.find(item=>Number(item.id)===machine.id);
+      pmCycles[machine.id]=Number(storedMachine?.pmCycleDays)||30;
+    });
+
+    settings={};
+    settingData.forEach(r=>{if(r.key) settings[r.key]=r.value});
 
     pmRecords=(pmData||[]).map(r=>({
       ...r,
@@ -1847,12 +1847,14 @@ async function initData(){
       ts:Number(i.ts)||0
     }));
 
-    writeDataCache({machines:MACHINES,pmCycles,settings,pmRecords,issues});
+    writeDataCache({machines:MACHINES,pmCycles,pmRecords,issues});
     console.log(`✅ โหลดข้อมูลสำเร็จ: Machines ${MACHINES.length}, PM ${pmRecords.length}, Issues ${issues.length}`);
-    toast(hasFreshCache?'อัปเดตข้อมูลจาก Google Sheets สำเร็จ':'โหลดข้อมูลสำเร็จ','success');
+    toast(hasFreshCache?'อัปเดตข้อมูลจาก Firebase สำเร็จ':'โหลดข้อมูลสำเร็จ','success');
   }catch(e){
     console.error('initData failed:',e);
-    if(!hasFreshCache){toast('โหลดข้อมูลไม่สำเร็จ','error');}
+    if(cached) applyCachedData(cached);
+    const reason=describeFirebaseError(e);
+    toast(cached?`เชื่อมต่อ Firebase ไม่สำเร็จ กำลังแสดงข้อมูลที่บันทึกไว้: ${reason}`:`โหลดข้อมูลจาก Firebase ไม่สำเร็จ: ${reason}`,'error');
   }
 
   loadEl.remove();
@@ -1876,6 +1878,25 @@ async function initData(){
   const pmMonthFilter=document.getElementById('pm-month-filter');if(pmMonthFilter)pmMonthFilter.value=ym;
   populateIssueMachineFilter();
   renderDashboard();
-  showView('dashboard');
+  const translateReturnView=sessionStorage.getItem('hanger-translate-return-view');
+  sessionStorage.removeItem('hanger-translate-return-view');
+  const validViews=new Set(['dashboard','pm','issues','analytics','history','export','settings']);
+  showView(validViews.has(translateReturnView)?translateReturnView:'dashboard');
+  const hasPendingSettingsSignIn=sessionStorage.getItem(PENDING_SETTINGS_SIGNIN_KEY)==='true';
+  if(hasPendingSettingsSignIn&&firebaseAuth.currentUser&&!isSettingsAdmin()){
+    await signOutSettingsAdmin();
+    toast('บัญชี Google นี้ไม่มีสิทธิ์ผู้ดูแล','error');
+    return;
+  }
+  if(hasPendingSettingsSignIn&&isSettingsAdmin()){
+    sessionStorage.removeItem(PENDING_SETTINGS_SIGNIN_KEY);
+    try{
+      await loadProtectedSettings();
+      showView('settings');
+    }catch(error){
+      console.error('Loading protected settings failed:',error);
+      toast(`โหลดการตั้งค่าไม่สำเร็จ: ${error.message}`,'error');
+    }
+  }
 }
 window.addEventListener('DOMContentLoaded',initData);

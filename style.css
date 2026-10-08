@@ -55,6 +55,43 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);line-height:
 ::-webkit-scrollbar-thumb{background:var(--surface3);border-radius:3px}
 ::-webkit-scrollbar-thumb:hover{background:var(--border2)}
 
+/* ══ GOOGLE TRANSLATE ══ */
+.google-translate-widget{
+  width:100%;margin-bottom:10px;padding:8px;
+  background:var(--surface2);
+  border:1px solid var(--border2);border-radius:9px;
+  box-shadow:0 2px 8px rgba(0,0,0,.12);
+}
+.google-translate-widget .goog-te-gadget{
+  color:var(--muted);font:500 11px var(--font);
+}
+.google-translate-widget .goog-te-gadget .goog-te-combo{
+  width:100%;max-width:100%;height:32px;margin:0;
+  padding:0 30px 0 10px;border:1px solid var(--border2);border-radius:6px;
+  outline:none;background:var(--surface2);color:var(--text);
+  font:500 12px var(--font);cursor:pointer;
+}
+.google-translate-widget .goog-te-gadget .goog-te-combo:focus{
+  border-color:var(--accent);box-shadow:0 0 0 2px rgba(245,166,35,.16);
+}
+.translate-reset-btn{
+  width:100%;height:30px;margin:-4px 0 9px;
+  border:1px solid var(--border2);border-radius:6px;
+  background:var(--surface2);color:var(--text);
+  font:500 12px var(--font);cursor:pointer;
+}
+.translate-reset-btn:hover{border-color:var(--accent);color:var(--accent)}
+iframe.goog-te-banner-frame,
+.goog-te-banner-frame,
+#goog-gt-tt,
+.goog-te-balloon-frame,
+.goog-te-spinner-pos{
+  display:none!important;visibility:hidden!important;opacity:0!important;
+  height:0!important;width:0!important;
+}
+html,body{
+  top:0!important;position:static!important;margin-top:0!important;
+}
 /* ══ LAYOUT ══ */
 .shell{display:flex;height:100vh;overflow:hidden}
 .sidebar{
@@ -508,3 +545,19 @@ kbd{background:var(--surface3);border:1px solid var(--border2);border-radius:3px
   padding:3px 9px;border-radius:4px;font-size:11px;font-weight:700;
   cursor:pointer;border:1px solid;transition:all .12s;background:none;font-family:var(--font);
 }
+
+/* Keep Google Translate's banner from shifting the app and hide its extra branding. */
+html,body{top:0!important;margin-top:0!important}
+body{position:static!important}
+iframe.goog-te-banner-frame,.goog-te-banner-frame,#goog-gt-tt,.goog-te-balloon-frame,.goog-te-spinner-pos{display:none!important;visibility:hidden!important;opacity:0!important;height:0!important;width:0!important}
+.goog-te-gadget .goog-logo-link,.goog-te-gadget .goog-te-gadget-icon{display:none!important}
+.goog-te-gadget{font-size:0!important}
+.goog-te-gadget .goog-te-combo{font-size:12px!important}
+.goog-tooltip,.goog-tooltip:hover{display:none!important}
+.goog-text-highlight{background-color:transparent!important;box-shadow:none!important}
+
+/* Hide Google Translate's injected top banner, including newer banner class names. */
+iframe.goog-te-banner-frame.skiptranslate,body> .skiptranslate,body>iframe.skiptranslate,.VIpgJd-ZVi9od-ORHb-OEVmcd{display:none!important;visibility:hidden!important;height:0!important;max-height:0!important}
+html,body,body.translated-ltr,body.translated-rtl{top:0!important;margin-top:0!important}
+body{position:static!important}
+.skiptranslate iframe{display:none!important}

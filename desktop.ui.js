@@ -1,3 +1,9 @@
+const DEFAULT_MACHINES=Array.from({length:20},(_,index)=>({
+  id:index+1,
+  name:`Hanger ${String(index+1).padStart(2,'0')}`,
+  model:`HNG-${(index+1)*5}`
+}));
+let MACHINES=DEFAULT_MACHINES.map(machine=>({...machine}));
 let pmRecords=[];
 let issues=[];
 let settings={};
@@ -15,6 +21,7 @@ let batchSelected=new Set();
 let batchShift='day';
 let pmCycles={};
 
+function sortMachinesById(){MACHINES.sort((a,b)=>Number(a.id)-Number(b.id))}
 function loadPMCycles(){return{}}
 function savePMCycles(){saveMachines()}
 
@@ -59,12 +66,16 @@ function toggleTheme(){
   const btn=document.getElementById('theme-btn');
   if(btn)btn.textContent=isLight?'☀️ Light':'🌙 Dark';
   settings.theme=isLight?'light':'dark';
-  saveSettings(settings);
+  try{localStorage.setItem('hanger-pm-theme',settings.theme)}catch(error){console.warn('Could not save theme preference',error)}
+  if(isSettingsAdmin()) saveSettings(settings);
   renderDashboard();
 }
 function applyTheme(){
   const btn=document.getElementById('theme-btn');
-  if(settings.theme==='light'){document.body.classList.add('light');if(btn)btn.textContent='☀️ Light'}
+  let savedTheme='';
+  try{savedTheme=localStorage.getItem('hanger-pm-theme')||''}catch(error){console.warn('Could not read theme preference',error)}
+  const theme=savedTheme||settings.theme;
+  if(theme==='light'){document.body.classList.add('light');if(btn)btn.textContent='☀️ Light'}
   else{document.body.classList.remove('light');if(btn)btn.textContent='🌙 Dark'}
 }
 
@@ -112,7 +123,7 @@ function setAdminPin(){
 
   settings.adminPin=newPin;
   adminAuthenticatedAt=Date.now();
-  gsPost('saveSettings',settings);
+  saveSettings(settings);
 
   const tempModal=document.getElementById('modal-set-admin-pin-temp');
   if(tempModal)tempModal.remove();
@@ -201,7 +212,7 @@ function confirmNewPin(){
 
   settings.adminPin=newPin;
   adminAuthenticatedAt=Date.now();
-  gsPost('saveSettings',settings);
+  saveSettings(settings);
 
   const tempModal=document.getElementById('modal-new-pin-temp');
   if(tempModal)tempModal.remove();
@@ -222,6 +233,17 @@ function confirmNewPin(){
 }
 
 function showView(name){
+  if(name==='settings'&&!isSettingsAdmin()){
+    signInSettingsAdmin('settings').then(async email=>{
+      if(!email)return;
+      await loadProtectedSettings();
+      showView('settings');
+    }).catch(error=>{
+      console.error('Settings sign-in failed:',error);
+      toast(`เข้าสู่หน้าตั้งค่าไม่สำเร็จ: ${error.message}`,'error');
+    });
+    return;
+  }
   if(name==='settings'){
     if(!settings.adminPin){
       openSetAdminPinModal();
