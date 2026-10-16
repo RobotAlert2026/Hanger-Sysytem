@@ -15,6 +15,7 @@ let searchTerm='';
 let statusFilter='all';
 let selectedShift='day';
 let pendingDeleteId=null;
+let editPMId=null;
 let currentOverviewMonth=null;
 let batchMode=false;
 let batchSelected=new Set();

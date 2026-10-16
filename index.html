@@ -332,7 +332,7 @@ if(window.location.protocol==='http:'&&window.location.hostname==='127.0.0.1'){
       <div class="table-wrap" id="history-table-wrap">
         <table>
           <caption class="sr-only">ตารางประวัติ PM พร้อมตัวกรองตามวันที่และเครื่อง</caption>
-          <thead><tr><th>วันที่</th><th>กะ</th><th>เครื่อง</th><th>ช่าง</th><th>รายการ PM / หมายเหตุ</th><th style="width:80px">ลบ</th></tr></thead>
+          <thead><tr><th>วันที่</th><th>กะ</th><th>เครื่อง</th><th>ช่าง</th><th>รายการ PM / หมายเหตุ</th><th style="width:110px">ดำเนินการ</th></tr></thead>
           <tbody id="history-tbody"></tbody>
         </table>
       </div>
@@ -582,7 +582,7 @@ if(window.location.protocol==='http:'&&window.location.hostname==='127.0.0.1'){
 <div class="overlay" id="modal-pm">
   <div class="modal">
     <div class="modal-header">
-      <div class="modal-title">🔧 PM — <span id="modal-pm-machine-name">—</span></div>
+      <div class="modal-title" id="modal-pm-title">🔧 PM — <span id="modal-pm-machine-name">—</span></div>
       <button class="btn-icon" onclick="closeModal('modal-pm')">✕</button>
     </div>
     <div class="modal-body">
@@ -627,7 +627,7 @@ if(window.location.protocol==='http:'&&window.location.hostname==='127.0.0.1'){
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal('modal-pm')">ยกเลิก</button>
-      <button class="btn btn-primary" onclick="savePMEntry()">✓ บันทึก PM</button>
+      <button class="btn btn-primary" id="modal-pm-submit" onclick="savePMEntry()">✓ บันทึก PM</button>
     </div>
   </div>
 </div>

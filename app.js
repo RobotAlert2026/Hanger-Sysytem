@@ -222,6 +222,7 @@ function renderTechPicker(containerId, hiddenInputId, defaultValue=''){
 }
 
 function openPMModal(machineId){
+  editPMId=null;
   currentMachineId=machineId;
   const m=MACHINES.find(x=>x.id===machineId);
   document.getElementById('modal-pm-machine-name').textContent=m.name;
@@ -239,6 +240,38 @@ function openPMModal(machineId){
       ${item}
     </label>`).join('');
   updateChkProgress();
+  const title=document.getElementById('modal-pm-title');
+  if(title)title.firstChild.textContent='🔧 PM — ';
+  const submit=document.getElementById('modal-pm-submit');
+  if(submit)submit.textContent='✓ บันทึก PM';
+  openModal('modal-pm');
+}
+
+function openPMEdit(pmId){
+  const record=pmRecords.find(r=>r.id===pmId);
+  if(!record)return;
+  editPMId=pmId;
+  currentMachineId=record.machineId;
+  const machine=MACHINES.find(x=>x.id===record.machineId);
+  document.getElementById('modal-pm-machine-name').textContent=machine?.name||'—';
+  document.getElementById('pm-entry-date').value=record.date||today();
+  document.getElementById('pm-entry-note').value=record.note||'';
+  document.getElementById('pm-entry-has-issue').value='no';
+  document.getElementById('pm-issue-section').style.display='none';
+  selectShift(record.shift||'day');
+  renderTechPicker('pm-tech-picker','pm-entry-tech',record.tech||'');
+  const checked=new Set(record.checklist||[]);
+  const cl=document.getElementById('pm-checklist');
+  cl.innerHTML=PM_CHECKLIST.map((item,i)=>`
+    <label class="chk-item ${checked.has(item)?'checked':''}" id="chk-label-${i}">
+      <input type="checkbox" id="chk-${i}" onchange="updateChkProgress()" ${checked.has(item)?'checked':''}>
+      ${item}
+    </label>`).join('');
+  updateChkProgress();
+  const title=document.getElementById('modal-pm-title');
+  if(title)title.firstChild.textContent='✏️ แก้ไข PM — ';
+  const submit=document.getElementById('modal-pm-submit');
+  if(submit)submit.textContent='✓ บันทึกการแก้ไข';
   openModal('modal-pm');
 }
 
@@ -269,7 +302,13 @@ async function savePMEntry(){
     const mName=MACHINES.find(m=>m.id===machineId)?.name;
     if(!confirm(`⚠️ ${mName} ทำ PM ${shiftLabel(shift)} ไปแล้วเดือนนี้\n(${fmt(lastDate.date)} โดย ${lastDate.tech})\n\nยืนยันบันทึกซ้ำ?`)) return;
   }
-  const existIdx=pmRecords.findIndex(r=>r.machineId===machineId&&r.date===date&&r.shift===shift);
+  const duplicateIdx=pmRecords.findIndex(r=>r.machineId===machineId&&r.date===date&&r.shift===shift&&r.id!==editPMId);
+  if(duplicateIdx>=0){
+    if(!confirm('มีบันทึก PM ของเครื่องนี้ในวันที่และกะดังกล่าวอยู่แล้ว ต้องการเขียนทับหรือไม่?'))return;
+    void deletePMRecord(pmRecords[duplicateIdx].id);
+    pmRecords.splice(duplicateIdx,1);
+  }
+  const existIdx=pmRecords.findIndex(r=>r.id===editPMId);
   const record={
     id:existIdx>=0?pmRecords[existIdx].id:uid(),
     machineId,date,shift,tech,note,
@@ -290,7 +329,13 @@ async function savePMEntry(){
     void notifyCriticalIssue(iss).catch(e=>console.error('notifyCriticalIssue failed',e));
   }
   closeModal('modal-pm');
+  editPMId=null;
+  const title=document.getElementById('modal-pm-title');
+  if(title)title.firstChild.textContent='🔧 PM — ';
+  const submit=document.getElementById('modal-pm-submit');
+  if(submit)submit.textContent='✓ บันทึก PM';
   renderPMGrid();updateBadges();updateSidebarStats();
+  filterHistory();
   toast(`บันทึก PM ${MACHINES.find(m=>m.id===machineId).name} ${shiftLabel(shift)} สำเร็จ`);
 }
 
@@ -834,7 +879,7 @@ function renderHistory(records){
           ${note?`<div class="history-note">📝 ${note}</div>`:''}
         </div>
       </td>
-      <td><button type="button" class="btn btn-xs btn-danger" onclick="promptDeletePM('${r.id}')" aria-label="ลบรายการ PM">🗑</button></td>
+      <td style="white-space:nowrap"><button type="button" class="btn btn-xs btn-secondary" onclick="openPMEdit('${r.id}')" aria-label="แก้ไขรายการ PM">✏️ แก้ไข</button> <button type="button" class="btn btn-xs btn-danger" onclick="promptDeletePM('${r.id}')" aria-label="ลบรายการ PM">🗑</button></td>
     </tr>
     <tr class="history-detail-row" id="history-detail-${r.id}" style="display:none">
       <td colspan="6">
