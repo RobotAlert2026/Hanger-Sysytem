@@ -16,6 +16,7 @@ let statusFilter='all';
 let selectedShift='day';
 let pendingDeleteId=null;
 let editPMId=null;
+let pendingPMRecordId=null;
 let currentOverviewMonth=null;
 let batchMode=false;
 let batchSelected=new Set();
@@ -27,6 +28,7 @@ function loadPMCycles(){return{}}
 function savePMCycles(){saveMachines()}
 
 function today(){const n=new Date();return`${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`}
+function shiftLabel(shift){return shift==='night'?'กะดึก':'กะเช้า'}
 function parseLocalDate(s){if(!s)return new Date(NaN);const p=String(s).slice(0,10).split('-');return new Date(parseInt(p[0]),parseInt(p[1])-1,parseInt(p[2]))}
 function normalizeDate(s){
   if(!s)return'';

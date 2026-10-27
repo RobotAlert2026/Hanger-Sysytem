@@ -223,6 +223,7 @@ function renderTechPicker(containerId, hiddenInputId, defaultValue=''){
 
 function openPMModal(machineId){
   editPMId=null;
+  pendingPMRecordId=null;
   currentMachineId=machineId;
   const m=MACHINES.find(x=>x.id===machineId);
   document.getElementById('modal-pm-machine-name').textContent=m.name;
@@ -251,6 +252,7 @@ function openPMEdit(pmId){
   const record=pmRecords.find(r=>r.id===pmId);
   if(!record)return;
   editPMId=pmId;
+  pendingPMRecordId=null;
   currentMachineId=record.machineId;
   const machine=MACHINES.find(x=>x.id===record.machineId);
   document.getElementById('modal-pm-machine-name').textContent=machine?.name||'—';
@@ -302,20 +304,31 @@ async function savePMEntry(){
     const mName=MACHINES.find(m=>m.id===machineId)?.name;
     if(!confirm(`⚠️ ${mName} ทำ PM ${shiftLabel(shift)} ไปแล้วเดือนนี้\n(${fmt(lastDate.date)} โดย ${lastDate.tech})\n\nยืนยันบันทึกซ้ำ?`)) return;
   }
-  const duplicateIdx=pmRecords.findIndex(r=>r.machineId===machineId&&r.date===date&&r.shift===shift&&r.id!==editPMId);
-  if(duplicateIdx>=0){
+  const duplicate=pmRecords.find(r=>r.machineId===machineId&&r.date===date&&r.shift===shift&&r.id!==editPMId);
+  if(duplicate){
     if(!confirm('มีบันทึก PM ของเครื่องนี้ในวันที่และกะดังกล่าวอยู่แล้ว ต้องการเขียนทับหรือไม่?'))return;
-    void deletePMRecord(pmRecords[duplicateIdx].id);
-    pmRecords.splice(duplicateIdx,1);
   }
   const existIdx=pmRecords.findIndex(r=>r.id===editPMId);
   const record={
-    id:existIdx>=0?pmRecords[existIdx].id:uid(),
+    id:existIdx>=0?pmRecords[existIdx].id:(pendingPMRecordId||(pendingPMRecordId=uid())),
     machineId,date,shift,tech,note,
     checklist:checkedItems,checkedCount:checkedItems.length,totalItems:PM_CHECKLIST.length,ts:Date.now()
   };
-  if(existIdx>=0) pmRecords[existIdx]=record; else pmRecords.push(record);
-  void savePMRecord(record);
+  const submit=document.getElementById('modal-pm-submit');
+  if(submit){submit.disabled=true;submit.textContent='กำลังบันทึก...'}
+  try{
+    const saved=await savePMRecord(record);
+    if(!saved)return;
+    pendingPMRecordId=null;
+    if(duplicate){
+      const deleted=await deletePMRecord(duplicate.id);
+      if(deleted)pmRecords=pmRecords.filter(r=>r.id!==duplicate.id);
+    }
+    const savedIdx=pmRecords.findIndex(r=>r.id===record.id);
+    if(savedIdx>=0)pmRecords[savedIdx]=record;else pmRecords.push(record);
+  }finally{
+    if(submit){submit.disabled=false;submit.textContent=editPMId?'✓ บันทึกการแก้ไข':'✓ บันทึก PM'}
+  }
   if(hasIssue){
     const iss={
       id:uid(),machineId,machineName:MACHINES.find(m=>m.id===machineId).name,
@@ -332,7 +345,6 @@ async function savePMEntry(){
   editPMId=null;
   const title=document.getElementById('modal-pm-title');
   if(title)title.firstChild.textContent='🔧 PM — ';
-  const submit=document.getElementById('modal-pm-submit');
   if(submit)submit.textContent='✓ บันทึก PM';
   renderPMGrid();updateBadges();updateSidebarStats();
   filterHistory();
@@ -1047,21 +1059,34 @@ function openBatchPMModal(){
   selectBatchShift('day');
   openModal('modal-batch-pm');
 }
-function saveBatchPM(){
+async function saveBatchPM(){
   const date=document.getElementById('batch-date').value;
   const tech=document.getElementById('batch-tech').value.trim()||'ไม่ระบุ';
   const note=document.getElementById('batch-note').value.trim();
   if(!date){toast('กรุณาระบุวันที่','error');return}
-  let count=0;
-  batchSelected.forEach(machineId=>{
-    const existIdx=pmRecords.findIndex(r=>r.machineId===machineId&&r.date===date&&r.shift===batchShift);
-    const rec={id:existIdx>=0?pmRecords[existIdx].id:uid(),machineId,date,shift:batchShift,tech,note,checklist:[],checkedCount:0,totalItems:PM_CHECKLIST.length,ts:Date.now()};
-    if(existIdx>=0)pmRecords[existIdx]=rec;else pmRecords.push(rec);
-    savePMRecord(rec);count++;
-  });
-  closeModal('modal-batch-pm');toggleBatchMode();
+  const machineIds=[...batchSelected];
+  if(!machineIds.length){toast('กรุณาเลือกเครื่องก่อน','error');return}
+  const submit=document.querySelector('#modal-batch-pm .modal-footer .btn-primary');
+  if(submit){submit.disabled=true;submit.textContent='กำลังบันทึก...'}
+  let savedCount=0;
+  try{
+    for(const machineId of machineIds){
+      const existIdx=pmRecords.findIndex(r=>r.machineId===machineId&&r.date===date&&r.shift===batchShift);
+      const rec={id:existIdx>=0?pmRecords[existIdx].id:uid(),machineId,date,shift:batchShift,tech,note,checklist:[],checkedCount:0,totalItems:PM_CHECKLIST.length,ts:Date.now()};
+      if(!await savePMRecord(rec))continue;
+      if(existIdx>=0)pmRecords[existIdx]=rec;else pmRecords.push(rec);
+      savedCount++;
+    }
+  }finally{
+    if(submit){submit.disabled=false;submit.textContent='✓ บันทึก PM ทั้งหมด'}
+  }
   renderPMGrid();updateBadges();updateSidebarStats();
-  toast(`บันทึก PM ${count} เครื่อง (${shiftLabel(batchShift)}) สำเร็จ`);
+  if(savedCount===machineIds.length){
+    closeModal('modal-batch-pm');toggleBatchMode();
+    toast(`บันทึก PM ${savedCount} เครื่อง (${shiftLabel(batchShift)}) สำเร็จ`);
+  }else{
+    toast(`บันทึก PM สำเร็จ ${savedCount}/${machineIds.length} เครื่อง รายการที่เหลือยังเลือกไว้ให้ลองใหม่`,'error');
+  }
 }
 
 // ══════════════════════════════════════════
@@ -1582,7 +1607,7 @@ function importCSV(input){
   const file=input.files[0];if(!file)return;
   const type=document.getElementById('csv-import-type')?.value||'pm';
   const reader=new FileReader();
-  reader.onload=e=>{
+  reader.onload=async e=>{
     try{
       const {headers,rows}=parseCSV(e.target.result);
       if(!headers.length){toast('ไฟล์ CSV ว่างหรือรูปแบบไม่ถูกต้อง','error');return}
@@ -1590,30 +1615,32 @@ function importCSV(input){
       if(type==='pm'){
         const cm={date:headers.findIndex(h=>['วันที่','date'].includes(h)),shift:headers.findIndex(h=>['กะ','shift'].includes(h)),machine:headers.findIndex(h=>['เครื่อง','machine'].includes(h)),tech:headers.findIndex(h=>['ช่าง','tech'].includes(h)),note:headers.findIndex(h=>['หมายเหตุ','note'].includes(h))};
         if(cm.date<0||cm.machine<0){toast('ไม่พบคอลัมน์ "วันที่" หรือ "เครื่อง"','error');return}
-        rows.forEach((row,ri)=>{
+        for(let ri=0;ri<rows.length;ri++){
+          const row=rows[ri];
           try{
             const dateRaw=(row[cm.date]||'').trim();
             let date=dateRaw;
             if(/^\d{2}\/\d{2}\/\d{4}$/.test(dateRaw)){const p=dateRaw.split('/');date=`${p[2]}-${p[1]}-${p[0]}`}
-            if(!date||!/^\d{4}-\d{2}-\d{2}$/.test(date)){errors.push(`แถว ${ri+2}: วันที่ไม่ถูกต้อง`);skipped++;return}
+            if(!date||!/^\d{4}-\d{2}-\d{2}$/.test(date)){errors.push(`แถว ${ri+2}: วันที่ไม่ถูกต้อง`);skipped++;continue}
             const machineName=(row[cm.machine]||'').trim();
             const m=MACHINES.find(x=>x.name.toLowerCase()===machineName.toLowerCase()||x.id===parseInt(machineName));
-            if(!m){errors.push(`แถว ${ri+2}: ไม่พบเครื่อง "${machineName}"`);skipped++;return}
+            if(!m){errors.push(`แถว ${ri+2}: ไม่พบเครื่อง "${machineName}"`);skipped++;continue}
             const shiftRaw=(cm.shift>=0?row[cm.shift]:'').trim().toLowerCase();
             const shift=shiftRaw.includes('ดึก')||shiftRaw.includes('night')?'night':'day';
             const tech=(cm.tech>=0?row[cm.tech]:'').trim()||'นำเข้า CSV';
             const note=(cm.note>=0?row[cm.note]:'').trim();
-            if(pmRecords.find(r=>r.machineId===m.id&&r.date===date&&r.shift===shift)){skipped++;return}
+            if(pmRecords.find(r=>r.machineId===m.id&&r.date===date&&r.shift===shift)){skipped++;continue}
             const rec={id:uid(),machineId:m.id,date,shift,tech,note,checklist:[],checkedCount:0,totalItems:PM_CHECKLIST.length,ts:Date.now()};
-            pmRecords.push(rec);savePMRecord(rec);imported++;
+            if(!await savePMRecord(rec)){errors.push(`แถว ${ri+2}: บันทึก Firebase ไม่สำเร็จ`);skipped++;continue}
+            pmRecords.push(rec);imported++;
           }catch(err){errors.push(`แถว ${ri+2}: ${err.message}`);skipped++}
-        });
+        }
       }
       const resultEl=document.getElementById('csv-import-result');
       if(resultEl){
         resultEl.style.display='block';
         resultEl.innerHTML=`<div style="background:${imported>0?'rgba(34,197,94,.1)':'rgba(239,68,68,.1)'};border:1px solid ${imported>0?'rgba(34,197,94,.25)':'rgba(239,68,68,.25)'};border-radius:7px;padding:11px;font-size:12px">
-          <div style="font-weight:700;color:${imported>0?'var(--success)':'var(--danger)'}">✅ นำเข้าสำเร็จ ${imported} รายการ${skipped?` · ข้าม ${skipped}`:''}</div>
+          <div style="font-weight:700;color:${imported>0?'var(--success)':'var(--danger)'}">${imported>0?'✅':'❌'} บันทึกสำเร็จ ${imported} รายการ${skipped?` · ข้าม/ผิดพลาด ${skipped}`:''}</div>
           ${errors.slice(0,5).map(e=>`<div style="color:var(--danger);margin-top:3px">• ${e}</div>`).join('')}
         </div>`;
       }

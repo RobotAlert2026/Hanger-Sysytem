@@ -12,6 +12,7 @@ const FIREBASE_SETTINGS_ADMINS=['robotalert.notification2026@gmail.com'];
 const PENDING_SETTINGS_SIGNIN_KEY='hanger-pending-settings-signin';
 const DATA_CACHE_KEY='hanger-pm-cache-v1';
 const DATA_CACHE_TTL_MS=5*60*1000;
+const FIREBASE_WRITE_TIMEOUT_MS=15000;
 let firebaseInstancePromise;
 let firebaseAuth=null;
 let firebaseAuthReadyPromise;
@@ -178,13 +179,21 @@ async function writeFirebaseBatch(operations){
 }
 
 async function reportFirebaseWrite(operation){
+  let timeoutId;
   try{
-    await operation();
+    await Promise.race([
+      operation(),
+      new Promise((_,reject)=>{
+        timeoutId=setTimeout(()=>reject(new Error('Firebase ไม่ตอบกลับภายใน 15 วินาที กรุณาตรวจสอบอินเทอร์เน็ต แล้วลองบันทึกอีกครั้ง')),FIREBASE_WRITE_TIMEOUT_MS);
+      })
+    ]);
     return true;
   }catch(error){
     console.error('Firebase write failed:',error);
     toast(`บันทึก Firebase ไม่สำเร็จ: ${error.message}`,'error');
     return false;
+  }finally{
+    clearTimeout(timeoutId);
   }
 }
 
